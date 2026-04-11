@@ -1,0 +1,52 @@
+import mongoose from "mongoose";
+
+const pharmacySchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    address: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    contact: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    rating: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 5,
+    },
+    imageUrl: {
+      type: String,
+      default:
+        "https://images.unsplash.com/photo-1586282391129-76a6df230234?auto=format&fit=crop&w=300&q=80",
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        required: true,
+      },
+      coordinates: {
+        type: [Number],
+        required: true,
+      },
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+pharmacySchema.index({ location: "2dsphere" });
+
+const Pharmacy = mongoose.model("Pharmacy", pharmacySchema);
+
+export default Pharmacy;
