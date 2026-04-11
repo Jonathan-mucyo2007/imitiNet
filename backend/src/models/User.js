@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 
 const allowedRoles = ["patient", "pharmacy", "insurer", "regulator"];
+const insuranceStatuses = ["active", "inactive"];
 
 const userSchema = new mongoose.Schema(
   {
@@ -11,6 +12,11 @@ const userSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       lowercase: true,
+    },
+    fullName: {
+      type: String,
+      required: true,
+      trim: true,
     },
     password: {
       type: String,
@@ -34,6 +40,20 @@ const userSchema = new mongoose.Schema(
       trim: true,
       required() {
         return this.role === "pharmacy" || this.role === "insurer";
+      },
+    },
+    pharmacyProfileId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Pharmacy",
+    },
+    insuranceStatus: {
+      type: String,
+      enum: insuranceStatuses,
+      default() {
+        return this.role === "patient" ? "active" : undefined;
+      },
+      required() {
+        return this.role === "patient";
       },
     },
   },

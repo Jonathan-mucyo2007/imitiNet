@@ -5,17 +5,72 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function buildInventoryStages({ query, category }) {
-  const stages = [
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceKm(fromLat, fromLng, toLat, toLng) {
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(toLat - fromLat);
+  const dLng = toRadians(toLng - fromLng);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(fromLat)) *
+      Math.cos(toRadians(toLat)) *
+      Math.sin(dLng / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function attachDistance(results, lat, lng) {
+  if (lat === undefined || lng === undefined) {
+    return results;
+  }
+
+  const parsedLat = Number(lat);
+  const parsedLng = Number(lng);
+
+  if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
+    return results;
+  }
+
+  return results
+    .map((item) => {
+      const [pharmacyLng, pharmacyLat] = item.pharmacy.location.coordinates;
+      return {
+        ...item,
+        distanceKm: calculateDistanceKm(parsedLat, parsedLng, pharmacyLat, pharmacyLng),
+      };
+    })
+    .sort((first, second) => {
+      if (first.distanceKm !== second.distanceKm) {
+        return first.distanceKm - second.distanceKm;
+      }
+
+      return first.priceRWF - second.priceRWF;
+    });
+}
+
+async function buildSearchResults({ query, category, lat, lng }) {
+  const pipeline = [
     {
       $lookup: {
-        from: "medicines",
-        localField: "medicineId",
+        from: "medicinevariants",
+        localField: "medicineVariantId",
         foreignField: "_id",
-        as: "medicine",
+        as: "variant",
       },
     },
-    { $unwind: "$medicine" },
+    { $unwind: "$variant" },
+    {
+      $lookup: {
+        from: "medicinegroups",
+        localField: "variant.medicineGroupId",
+        foreignField: "_id",
+        as: "medicineGroup",
+      },
+    },
+    { $unwind: "$medicineGroup" },
     {
       $lookup: {
         from: "pharmacies",
@@ -29,118 +84,46 @@ function buildInventoryStages({ query, category }) {
 
   const match = {};
 
+  // Filter by category if one is selected
   if (category && category !== "All") {
-    match["medicine.category"] = category;
+    match["medicineGroup.category"] = category;
   }
 
+  // Text search on medicine group, category, description, or pharmacy name
   if (query) {
     const searchRegex = new RegExp(escapeRegex(query), "i");
     match.$or = [
-      { "medicine.genericName": searchRegex },
-      { "medicine.category": searchRegex },
+      { "medicineGroup.genericName": searchRegex },
+      { "medicineGroup.category": searchRegex },
+      { "medicineGroup.description": searchRegex },
+      { "variant.dosage": searchRegex },
+      { "variant.form": searchRegex },
       { "pharmacy.name": searchRegex },
-      { "pharmacy.address": searchRegex },
     ];
   }
 
   if (Object.keys(match).length > 0) {
-    stages.push({ $match: match });
+    pipeline.push({ $match: match });
   }
 
-  return stages;
-}
-
-async function buildSearchResults({ query, category, lat, lng }) {
-  const parsedLat = Number(lat);
-  const parsedLng = Number(lng);
-  const hasCoordinates = Number.isFinite(parsedLat) && Number.isFinite(parsedLng);
-
-  if (hasCoordinates) {
-    return Pharmacy.aggregate([
-      {
-        $geoNear: {
-          near: {
-            type: "Point",
-            coordinates: [parsedLng, parsedLat],
-          },
-          distanceField: "distanceMeters",
-          spherical: true,
-        },
-      },
-      {
-        $lookup: {
-          from: "inventories",
-          localField: "_id",
-          foreignField: "pharmacyId",
-          as: "inventoryItems",
-        },
-      },
-      { $unwind: "$inventoryItems" },
-      {
-        $lookup: {
-          from: "medicines",
-          localField: "inventoryItems.medicineId",
-          foreignField: "_id",
-          as: "medicine",
-        },
-      },
-      { $unwind: "$medicine" },
-      ...(category && category !== "All"
-        ? [{ $match: { "medicine.category": category } }]
-        : []),
-      ...(query
-        ? [
-            {
-              $match: {
-                $or: [
-                  { "medicine.genericName": new RegExp(escapeRegex(query), "i") },
-                  { "medicine.category": new RegExp(escapeRegex(query), "i") },
-                  { name: new RegExp(escapeRegex(query), "i") },
-                  { address: new RegExp(escapeRegex(query), "i") },
-                ],
-              },
-            },
-          ]
-        : []),
-      {
-        $project: {
-          _id: "$inventoryItems._id",
-          stockStatus: "$inventoryItems.stockStatus",
-          priceRWF: "$inventoryItems.priceRWF",
-          medicine: {
-            id: "$medicine._id",
-            genericName: "$medicine.genericName",
-            category: "$medicine.category",
-            basePrice: "$medicine.basePrice",
-          },
-          pharmacy: {
-            id: "$_id",
-            name: "$name",
-            address: "$address",
-            contact: "$contact",
-            rating: "$rating",
-            imageUrl: "$imageUrl",
-            location: "$location",
-          },
-          distanceMeters: 1,
-        },
-      },
-      { $sort: { distanceMeters: 1, stockStatus: 1, priceRWF: 1 } },
-    ]);
-  }
-
-  return Inventory.aggregate([
-    ...buildInventoryStages({ query, category }),
+  // Project the final structure needed by your frontend React app
+  pipeline.push(
     {
       $project: {
         _id: 1,
         stockStatus: 1,
         priceRWF: 1,
-        medicine: {
-          id: "$medicine._id",
-          genericName: "$medicine.genericName",
-          category: "$medicine.category",
-          basePrice: "$medicine.basePrice",
+        medicineGroup: {
+          id: "$medicineGroup._id",
+          name: "$medicineGroup.genericName",
+          category: "$medicineGroup.category",
+          description: "$medicineGroup.description",
+        },
+        variant: {
+          variantId: "$variant._id",
+          dosage: "$variant.dosage",
+          form: "$variant.form",
+          basePrice: "$variant.basePrice",
         },
         pharmacy: {
           id: "$pharmacy._id",
@@ -153,8 +136,48 @@ async function buildSearchResults({ query, category, lat, lng }) {
         },
       },
     },
-    { $sort: { stockStatus: 1, priceRWF: 1 } },
-  ]);
+    { $sort: { stockStatus: 1, priceRWF: 1 } } // Sort by availability, then price
+  );
+
+  const results = await Inventory.aggregate(pipeline);
+  const distanceSortedResults = attachDistance(results, lat, lng);
+  const groupedResults = new Map();
+
+  distanceSortedResults.forEach((item) => {
+    const key = `${item.pharmacy.id}:${item.medicineGroup.id}`;
+    const current = groupedResults.get(key);
+    const availableVariant = {
+      variantId: item.variant.variantId,
+      dosage: item.variant.dosage,
+      form: item.variant.form,
+      priceRWF: item.priceRWF,
+      stockStatus: item.stockStatus,
+      basePrice: item.variant.basePrice,
+    };
+
+    if (!current) {
+      groupedResults.set(key, {
+        pharmacy: item.pharmacy,
+        medicineGroup: item.medicineGroup,
+        availableVariants: [availableVariant],
+        distanceKm: item.distanceKm,
+      });
+      return;
+    }
+
+    current.availableVariants.push(availableVariant);
+  });
+
+  return Array.from(groupedResults.values()).map((item) => ({
+    ...item,
+    availableVariants: item.availableVariants.sort((first, second) => {
+      if (first.basePrice !== second.basePrice) {
+        return first.basePrice - second.basePrice;
+      }
+
+      return first.dosage.localeCompare(second.dosage);
+    }),
+  }));
 }
 
 export async function searchInventory(req, res) {

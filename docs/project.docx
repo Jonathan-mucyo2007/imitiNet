@@ -1,0 +1,80 @@
+1. Architectural Blueprint: Enterprise MERN Stack
+While MERN (MongoDB, Express, React, Node.js) is highly agile, healthcare systems require strict ACID compliance for financial transactions (claims) and flexible schemas for medical records (EHR).
+
+Frontend (React.js): Build a unified Single Page Application (SPA) or micro-frontends. Use Redux or Context API for state management. Implement heavily modular components so the UI can adapt dynamically based on the user's RBAC (Role-Based Access Control) token.
+
+Backend (Node.js & Express.js): Move away from a standard monolith. Design a Microservices Architecture or a highly decoupled modular monolith. You will need distinct services: Auth Service, Integration/FHIR Middleware Service, Claims Engine, and Inventory Routing Service.
+
+Database (MongoDB): MongoDB is excellent for storing complex, nested FHIR (Fast Healthcare Interoperability Resources) JSON documents from e-Ubuzima or OpenClinic. However, for the insurance claims and financial ledgers, you must utilize MongoDB’s multi-document ACID transactions (introduced in v4.0+) to ensure no data is lost during network failures, or hybridize by adding a SQL database specifically for billing.
+
+API Gateway & Interoperability Layer: This is the heart of ImitiNet. Your Node backend must act as an API gateway that translates incoming data from ISHYIGA (pharmacies) and OpenClinic into a standardized format before distributing it to RSSB/MMI.
+
+2. Role-Based Access Control (RBAC) Module Design
+Your authentication layer (using JWT and bcrypt) must strictly segregate these four portals.
+
+A. Patient Portal
+National ID SSO: Log in using the Rwandan National ID.
+
+Geospatial Medicine Search: Use MongoDB's $near spatial queries to allow patients to search for a prescribed drug and find the closest pharmacies with active stock.
+
+Insurance Engine: Real-time API call to RSSB/MMI returning their active coverage tier and calculating their out-of-pocket co-pay before they even leave the house.
+
+EHR Viewer: A read-only dashboard pulling recent consultation notes and e-prescriptions synced from e-Ubuzima.
+
+B. Pharmacy & Hospital Portal
+Smart Inventory Webhooks: Instead of manual entry, build secure endpoints that ISHYIGA and local hospital POS systems can ping automatically whenever a drug is dispensed, keeping your central MongoDB ledger updated in real-time.
+
+Claim Submission Engine: Automate the packaging of dispensed e-prescriptions into structured claim payloads formatted specifically for RSSB/MMI APIs.
+
+Operational Dashboards: React charts (e.g., Chart.js or Recharts) showing daily dispensing volumes, pending claim statuses, and stock-out warnings.
+
+C. Insurer Portal (RSSB/MMI)
+Claims Analytics: High-level dashboards rendering thousands of daily transactions.
+
+Fraud Detection Logic: Implement algorithmic checks on the backend (e.g., flagging if a single National ID is prescribed the same heavy antibiotic from three different clinics in one week).
+
+Onboarding Workflow: A digital pipeline to verify, approve, and issue API keys to newly registered pharmacies joining the ImitiNet network.
+
+D. Regulator Portal (MoH / Rwanda FDA)
+Traceability Ledger: Track serialized batches of medicine from import to patient dispensing to combat counterfeit drugs.
+
+Macro Health Metrics: Heatmaps showing disease outbreaks (e.g., a sudden spike in antimalarial sales in a specific province) to inform public health policy.
+
+3. Execution Roadmap
+Aligning with your proposal document, here is how a senior engineering team executes this timeline:
+
+Phase 1: Architecture & Core Build (Months 1–3)
+
+Define the JSON/FHIR data schemas for interoperability.
+
+Set up CI/CD pipelines (GitHub Actions, Docker containerization) for reliable deployment.
+
+Develop the core Node.js API Gateway and the database schemas.
+
+Build the base React interfaces for the 4 portals.
+
+Milestone: A sandbox environment where dummy data flows from a simulated OpenClinic to a simulated RSSB endpoint.
+
+Phase 2: Pilot & Integration Testing (Months 4–6)
+
+Develop the exact API bridges for RSSB and MMI.
+
+Deploy locally in a controlled pilot (e.g., a few select pharmacies and one district hospital).
+
+Stress-test the system's ability to handle concurrent searches and claim submissions.
+
+Milestone: The first real-world e-prescription is tracked, dispensed, and claimed entirely through ImitiNet.
+
+Phase 3: National Rollout & Scale (Months 7–12)
+
+Optimize database indexes and implement Redis caching for the most frequent search queries (like common painkillers or antibiotics) to reduce server load.
+
+Begin heavy user training and onboarding for pharmacists and hospital admins.
+
+Lock down security protocols (penetration testing, ensuring compliance with Rwanda's data protection laws regarding sensitive patient health data).
+
+Phase 4: Regional Expansion & Analytics (Year 2+)
+
+Refactor code for multi-tenancy to support neighboring East African regulations.
+
+Introduce predictive data analytics for insurers and regulators using the massive historical dataset you’ve accumulated.

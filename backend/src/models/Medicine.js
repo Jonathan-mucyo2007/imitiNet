@@ -12,6 +12,12 @@ const medicineSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    dosage: {
+      type: String,
+      required: true,
+      trim: true,
+      default: "Standard",
+    },
     basePrice: {
       type: Number,
       required: true,

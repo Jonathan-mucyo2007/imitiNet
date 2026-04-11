@@ -8,9 +8,9 @@ const inventorySchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    medicineId: {
+    medicineVariantId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Medicine",
+      ref: "MedicineVariant",
       required: true,
       index: true,
     },
@@ -30,7 +30,7 @@ const inventorySchema = new mongoose.Schema(
   }
 );
 
-inventorySchema.index({ pharmacyId: 1, medicineId: 1 }, { unique: true });
+inventorySchema.index({ pharmacyId: 1, medicineVariantId: 1 }, { unique: true });
 
 const Inventory = mongoose.model("Inventory", inventorySchema);
 

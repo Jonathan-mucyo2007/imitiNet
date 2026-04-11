@@ -15,6 +15,7 @@ import clinicImageTwo from "../../assets/clinic2.jfif";
 import clinicImageThree from "../../assets/clinic3.jfif";
 import PatientLayout from "../../components/layout/PatientLayout";
 import api from "../../services/api";
+import { useNavigate } from "react-router-dom";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -44,6 +45,18 @@ function formatCurrency(value) {
   return `RWF ${value.toLocaleString()}`;
 }
 
+function formatDistance(distanceKm) {
+  if (distanceKm === undefined || distanceKm === null) {
+    return null;
+  }
+
+  if (distanceKm < 1) {
+    return `${Math.round(distanceKm * 1000)} m away`;
+  }
+
+  return `${distanceKm.toFixed(1)} km away`;
+}
+
 function deriveBestStatus(statuses) {
   if (statuses.includes("In Stock")) {
     return "In Stock";
@@ -54,6 +67,124 @@ function deriveBestStatus(statuses) {
   return "Out of Stock";
 }
 
+function formatVariantLabel(variant) {
+  return `${variant.dosage} ${variant.form}`;
+}
+
+function MedicineCard({ result, index, navigate }) {
+  const [selectedVariantId, setSelectedVariantId] = useState(
+    result.availableVariants[0]?.variantId || ""
+  );
+
+  const selectedVariant =
+    result.availableVariants.find((variant) => variant.variantId === selectedVariantId) ||
+    result.availableVariants[0];
+
+  const stockStatusClass = selectedVariant
+    ? statusStyle[selectedVariant.stockStatus]
+    : statusStyle["Out of Stock"];
+
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.03 }}
+      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-display text-xl font-semibold text-slate-900">
+            {result.medicineGroup.name}
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {result.medicineGroup.description}
+          </p>
+        </div>
+
+        {selectedVariant ? (
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}
+          >
+            {selectedVariant.stockStatus}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-5 rounded-xl bg-slate-50 px-4 py-3">
+        <label
+          htmlFor={`variant-${result.pharmacy.id}-${result.medicineGroup.id}`}
+          className="block text-sm font-medium text-slate-500"
+        >
+          Select Dosage
+        </label>
+        {result.availableVariants.length > 1 ? (
+          <select
+            id={`variant-${result.pharmacy.id}-${result.medicineGroup.id}`}
+            value={selectedVariantId}
+            onChange={(event) => setSelectedVariantId(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+          >
+            {result.availableVariants.map((variant) => (
+              <option key={variant.variantId} value={variant.variantId}>
+                {formatVariantLabel(variant)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="mt-2 text-sm font-medium text-slate-900">
+            {selectedVariant ? formatVariantLabel(selectedVariant) : "No dosage available"}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-400">Selected Variant Price</p>
+          <p className="mt-1 text-lg font-semibold text-slate-900">
+            {selectedVariant ? formatCurrency(selectedVariant.priceRWF) : "Unavailable"}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {result.availableVariants.length} dosage
+          {result.availableVariants.length > 1 ? "s" : ""} at this pharmacy
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-3">
+        <MapPin className="mt-0.5 h-4 w-4 text-blue-600" />
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{result.pharmacy.name}</p>
+          <p className="mt-1 text-sm text-slate-500">{result.pharmacy.address}</p>
+          {formatDistance(result.distanceKm) ? (
+            <p className="mt-1 text-xs font-medium text-blue-700">
+              {formatDistance(result.distanceKm)}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <motion.button
+        whileTap={{ scale: 0.98 }}
+        type="button"
+        disabled={!selectedVariant}
+        onClick={() =>
+          navigate("/patient/check-insurance", {
+            state: {
+              medicineVariantId: selectedVariant.variantId,
+              genericName: result.medicineGroup.name,
+              dosage: formatVariantLabel(selectedVariant),
+            },
+          })
+        }
+        className="mt-5 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Check Insurance
+      </motion.button>
+    </motion.article>
+  );
+}
+
 function FindMedicine() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
@@ -62,6 +193,7 @@ function FindMedicine() {
   const [userLocation, setUserLocation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -112,40 +244,23 @@ function FindMedicine() {
     return () => window.clearTimeout(timeoutId);
   }, [searchTerm, activeFilter, userLocation]);
 
-  const groupedMedicines = useMemo(() => {
-    const groupedMap = new Map();
+  const resultCards = useMemo(
+    () =>
+      results.map((item) => ({
+        ...item,
+        availableVariants: [...(item.availableVariants || [])].sort((first, second) => {
+          if (first.priceRWF !== second.priceRWF) {
+            return first.priceRWF - second.priceRWF;
+          }
 
-    results.forEach((item) => {
-      const key = item.medicine.id;
-      const current = groupedMap.get(key);
-
-      if (!current) {
-        groupedMap.set(key, {
-          id: key,
-          name: item.medicine.genericName,
-          category: item.medicine.category,
-          basePrice: item.medicine.basePrice,
-          prices: [item.priceRWF],
-          statuses: [item.stockStatus],
-          pharmacies: [item.pharmacy],
-          nearestPharmacy: item.pharmacy,
-        });
-        return;
-      }
-
-      current.prices.push(item.priceRWF);
-      current.statuses.push(item.stockStatus);
-      current.pharmacies.push(item.pharmacy);
-    });
-
-    return Array.from(groupedMap.values()).map((item) => ({
-      ...item,
-      minPrice: Math.min(...item.prices),
-      maxPrice: Math.max(...item.prices),
-      bestStatus: deriveBestStatus(item.statuses),
-      description: `${item.category} medicine available across ${item.pharmacies.length} pharmacies in Kigali.`,
-    }));
-  }, [results]);
+          return formatVariantLabel(first).localeCompare(formatVariantLabel(second));
+        }),
+        bestStatus: deriveBestStatus(
+          (item.availableVariants || []).map((variant) => variant.stockStatus)
+        ),
+      })),
+    [results]
+  );
 
   const mapMarkers = useMemo(() => {
     const markerMap = new Map();
@@ -227,7 +342,7 @@ function FindMedicine() {
               Medicine Results
             </h2>
             <p className="text-sm text-slate-500">
-              {groupedMedicines.length} medicines found
+              {resultCards.length} pharmacy results found
             </p>
           </div>
 
@@ -241,74 +356,19 @@ function FindMedicine() {
             <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500 shadow-sm">
               Loading medicine availability...
             </div>
-          ) : groupedMedicines.length === 0 ? (
+          ) : resultCards.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500 shadow-sm">
               No medicines matched your current search and filters.
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {groupedMedicines.map((medicine, index) => (
-              <motion.article
-                key={medicine.id}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: index * 0.03 }}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="font-display text-xl font-semibold text-slate-900">
-                      {medicine.name}
-                    </h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-500">
-                      {medicine.description}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusStyle[medicine.bestStatus]}`}
-                  >
-                    {medicine.bestStatus}
-                  </span>
-                </div>
-
-                <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-400">Price Range</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">
-                      {medicine.minPrice === medicine.maxPrice
-                        ? formatCurrency(medicine.minPrice)
-                        : `${formatCurrency(medicine.minPrice)} - ${formatCurrency(
-                            medicine.maxPrice
-                          )}`}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    Available at {medicine.pharmacies.length} pharmacies
-                  </div>
-                </div>
-
-                <div className="mt-5 flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-3">
-                  <MapPin className="mt-0.5 h-4 w-4 text-blue-600" />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {medicine.nearestPharmacy.name}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {medicine.nearestPharmacy.address}
-                    </p>
-                  </div>
-                </div>
-
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  className="mt-5 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700"
-                >
-                  Check Insurance
-                </motion.button>
-              </motion.article>
+              {resultCards.map((result, index) => (
+                <MedicineCard
+                  key={`${result.pharmacy.id}-${result.medicineGroup.id}`}
+                  result={result}
+                  index={index}
+                  navigate={navigate}
+                />
               ))}
             </div>
           )}
@@ -327,7 +387,7 @@ function FindMedicine() {
 
             <div className="h-[560px]">
               <MapContainer
-                center={[-1.9441, 30.0619]}
+                center={userLocation ? [userLocation.lat, userLocation.lng] : [-1.9441, 30.0619]}
                 zoom={12}
                 scrollWheelZoom={false}
                 className="h-full w-full"

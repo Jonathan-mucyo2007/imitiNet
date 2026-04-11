@@ -14,7 +14,7 @@ import { useAuth } from "../../store/AuthContext";
 const sidebarItems = [
   { label: "My Dashboard", icon: LayoutGrid, to: "/dashboard/patient-overview", disabled: true },
   { label: "Find Medicine", icon: Pill, to: "/dashboard/patient" },
-  { label: "Check Insurance", icon: ShieldCheck, to: "/dashboard/patient-insurance", disabled: true },
+  { label: "Check Insurance", icon: ShieldCheck, to: "/patient/check-insurance" },
   { label: "My Appointments", icon: CalendarDays, to: "/dashboard/patient-appointments", disabled: true },
 ];
 

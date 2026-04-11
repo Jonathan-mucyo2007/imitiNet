@@ -16,16 +16,28 @@ function sanitizeUser(user) {
   return {
     id: user._id,
     email: user.email,
+    fullName: user.fullName,
     role: user.role,
     nationalId: user.nationalId || null,
     facilityId: user.facilityId || null,
+    pharmacyProfileId: user.pharmacyProfileId || null,
+    insuranceStatus: user.insuranceStatus || null,
     createdAt: user.createdAt,
   };
 }
 
 export async function register(req, res) {
   try {
-    const { email, password, role, nationalId, facilityId } = req.body;
+    const {
+      email,
+      password,
+      role,
+      nationalId,
+      facilityId,
+      insuranceStatus,
+      fullName,
+      pharmacyProfileId,
+    } = req.body;
 
     const existingUser = await User.findOne({ email: email?.toLowerCase() });
     if (existingUser) {
@@ -34,10 +46,13 @@ export async function register(req, res) {
 
     const user = await User.create({
       email,
+      fullName,
       password,
       role,
       nationalId: role === "patient" ? nationalId : undefined,
       facilityId: role === "pharmacy" || role === "insurer" ? facilityId : undefined,
+      pharmacyProfileId: role === "pharmacy" ? pharmacyProfileId : undefined,
+      insuranceStatus: role === "patient" ? insuranceStatus || "active" : undefined,
     });
 
     const token = generateToken(user);

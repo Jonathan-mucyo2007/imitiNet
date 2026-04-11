@@ -1,3 +1,4 @@
+import CheckInsurance from './pages/patient/CheckInsurance';
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
@@ -6,12 +7,21 @@ import DashboardPage from "./pages/DashboardPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import FindMedicine from "./pages/patient/FindMedicine";
+import NewClaim from "./pages/pharmacy/NewClaim";
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login/:role" element={<AuthPage />} />
+      <Route
+        path="/patient/check-insurance"
+        element={
+          <ProtectedRoute allowedRoles={["patient"]}>
+            <CheckInsurance />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/dashboard/patient"
         element={
@@ -24,7 +34,15 @@ function App() {
         path="/dashboard/pharmacy"
         element={
           <ProtectedRoute allowedRoles={["pharmacy"]}>
-            <DashboardPage role="pharmacy" />
+            <Navigate to="/dashboard/pharmacy/claims/new" replace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/pharmacy/claims/new"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacy"]}>
+            <NewClaim />
           </ProtectedRoute>
         }
       />
