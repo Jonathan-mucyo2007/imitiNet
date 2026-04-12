@@ -12,12 +12,14 @@ import DashboardPharmacy from "./pages/pharmacy/Dashboard";
 import InventoryPharmacy from "./pages/pharmacy/Inventory";
 import InsurerDashboard from "./pages/insurer/InsurerDashboard";
 import InsurerLayout from "./components/layout/InsurerLayout";
+import AboutPage from "./pages/AboutPage";
 import RegulatorLayout from "./components/layout/RegulatorLayout";
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/about" element={<AboutPage />} />
       <Route path="/login/:role" element={<AuthPage />} />
       <Route
         path="/patient/check-insurance"

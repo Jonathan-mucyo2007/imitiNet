@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import {
   Bell,
   Building2,
@@ -17,9 +18,9 @@ import regulatorPortalImage from "../assets/regulator.jfif";
 import RoleCard from "../components/RoleCard";
 
 const navigationItems = [
-  { label: "Home", icon: Home, active: true },
-  { label: "About ImitiNet", icon: Sparkles, active: false },
-  { label: "Contact Us", icon: Mail, active: false },
+  { label: "Home", icon: Home, to: "/", active: true },
+  { label: "About ImitiNet", icon: Sparkles, to: "/about", active: false },
+  { label: "Contact Us", icon: Mail, to: null, active: false },
 ];
 
 const roleCards = [
@@ -79,46 +80,34 @@ function LandingPage() {
             </p>
 
             <nav className="mt-5 space-y-2">
-              {navigationItems.map(({ label, icon: Icon, active }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    active
-                      ? "bg-slate-100 font-medium text-slate-900"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{label}</span>
-                </button>
-              ))}
+              {navigationItems.map(({ label, icon: Icon, active, to }) => {
+                const cls = `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                  active
+                    ? "bg-slate-100 font-medium text-slate-900"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                }`;
+                return to ? (
+                  <Link key={label} to={to} className={cls}>
+                    <Icon className="h-4 w-4" />
+                    <span>{label}</span>
+                  </Link>
+                ) : (
+                  <button key={label} type="button" className={cls}>
+                    <Icon className="h-4 w-4" />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
           <p className="mt-10 text-xs text-slate-400 lg:absolute lg:bottom-6 lg:left-5">
-            © ImitiNet 2024
+            © ImitiNet 2026
           </p>
         </aside>
 
         <main className="flex-1 bg-[#f8fafc] px-6 py-8 sm:px-8 lg:px-12">
           <div className="mx-auto max-w-7xl">
-            <div className="flex items-center justify-end gap-4">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition duration-200 hover:bg-blue-700"
-              >
-                <Bell className="h-4 w-4" />
-                Notifications
-              </button>
-
-              <img
-                src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80"
-                alt="User avatar"
-                className="h-10 w-10 rounded-full object-cover ring-2 ring-white shadow-sm"
-              />
-            </div>
-
             <section className="mt-10 max-w-3xl">
               <h1 className="font-display text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
                 Welcome to ImitiNet
