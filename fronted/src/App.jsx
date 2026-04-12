@@ -13,6 +13,7 @@ import InventoryPharmacy from "./pages/pharmacy/Inventory";
 import InsurerDashboard from "./pages/insurer/InsurerDashboard";
 import InsurerLayout from "./components/layout/InsurerLayout";
 import AboutPage from "./pages/AboutPage";
+import ContactPage from "./pages/ContactPage";
 import RegulatorLayout from "./components/layout/RegulatorLayout";
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/about" element={<AboutPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/login/:role" element={<AuthPage />} />
       <Route
         path="/patient/check-insurance"

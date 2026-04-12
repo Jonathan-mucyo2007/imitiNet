@@ -20,7 +20,7 @@ import RoleCard from "../components/RoleCard";
 const navigationItems = [
   { label: "Home", icon: Home, to: "/", active: true },
   { label: "About ImitiNet", icon: Sparkles, to: "/about", active: false },
-  { label: "Contact Us", icon: Mail, to: null, active: false },
+  { label: "Contact Us", icon: Mail, to: "/contact", active: false },
 ];
 
 const roleCards = [

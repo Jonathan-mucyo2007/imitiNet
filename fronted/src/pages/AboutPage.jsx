@@ -7,6 +7,7 @@ import {
   Globe, CheckCircle, Zap, FileText, Activity,
   ChevronRight,
 } from "lucide-react";
+import aboutImage from "../assets/about.jfif";
 
 // ─── CountUp Hook ─────────────────────────────────────────────────────────────
 
@@ -230,51 +231,72 @@ export default function AboutPage() {
       {/* ── HERO ────────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-white pt-20 pb-28 px-6">
         <MeshBackground />
-        <div className="relative z-10 mx-auto max-w-5xl text-center">
+        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[0.95fr_1.05fr]">
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold uppercase tracking-widest mb-8"
+            initial={{ opacity: 0, x: -24 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6 }}
+            className="order-2 lg:order-1"
           >
-            <Globe className="h-3.5 w-3.5" />
-            Rwanda's National Health Interoperability Platform
+            <div className="relative mx-auto max-w-xl overflow-hidden rounded-[2rem] border border-white/80 bg-white/70 p-4 shadow-[0_30px_80px_-44px_rgba(30,86,208,0.32)] backdrop-blur-xl">
+              <div className="absolute -bottom-2 left-12 right-12 h-24 rounded-full bg-blue-300/35 blur-3xl" />
+              <div className="relative overflow-hidden rounded-[1.6rem] border border-white/70">
+                <img
+                  src={aboutImage}
+                  alt="ImitiNet healthcare platform collaboration"
+                  className="h-[360px] w-full object-cover sm:h-[430px]"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.18),transparent_42%,rgba(30,86,208,0.1))]" />
+              </div>
+            </div>
           </motion.div>
 
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-5xl sm:text-6xl md:text-7xl font-display font-bold tracking-tight text-slate-900 leading-[1.08]"
-          >
-            Connecting Rwanda's
-            <br />
-            <span className="text-blue-600">Healthcare Ecosystem</span>
-          </motion.h1>
+          <div className="order-1 text-center lg:order-2 lg:text-left">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="mb-8 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-blue-700"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Rwanda&apos;s National Health Interoperability Platform
+            </motion.div>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-6 text-lg md:text-xl text-slate-500 leading-relaxed max-w-2xl mx-auto"
+            <motion.h1
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="text-5xl sm:text-6xl md:text-7xl font-display font-bold tracking-tight text-slate-900 leading-[1.08]"
+          >
+              Connecting Rwanda&apos;s
+              <br />
+              <span className="text-blue-600">Healthcare Ecosystem</span>
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-500 md:text-xl lg:max-w-xl"
           >
             ImitiNet bridges patients, pharmacies, insurers, and Minisante through a unified,
             FHIR-compliant digital backbone — powering transparent healthcare delivery across all 30 districts.
           </motion.p>
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.32 }}
-            className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.32 }}
+              className="mt-10 flex flex-col items-center gap-4 sm:flex-row lg:justify-start"
           >
-            <Link to="/" className="px-8 py-3.5 bg-blue-600 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-3.5 text-sm font-semibold text-white shadow-md shadow-blue-200 transition-colors hover:bg-blue-700">
               Explore Portals <ArrowRight className="h-4 w-4" />
             </Link>
-            <a href="#impact" className="px-8 py-3.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors">
+            <a href="#impact" className="rounded-xl border border-slate-200 px-8 py-3.5 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50">
               View Impact Data
             </a>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
