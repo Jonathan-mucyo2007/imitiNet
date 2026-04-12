@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { createApp } from "./src/app.js";
+import { initSocket } from "./src/socket.js";
+import http from "http";
 
 dotenv.config();
 
@@ -17,7 +19,10 @@ async function startServer() {
     await mongoose.connect(MONGODB_URI);
     console.log("MongoDB connected");
 
-    app.listen(PORT, () => {
+    const server = http.createServer(app);
+    initSocket(server);
+
+    server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {

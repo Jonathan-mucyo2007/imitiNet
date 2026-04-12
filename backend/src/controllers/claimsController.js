@@ -10,6 +10,7 @@ import {
   calculateCoverageBreakdown,
   validateCoverageInputs,
 } from "../services/claimsService.js";
+import traceabilityGateway from "../services/traceabilityGatewaySync.js";
 
 function buildClaimId() {
   const random = Math.floor(10000 + Math.random() * 90000);
@@ -67,25 +68,33 @@ async function buildPrescriptionCoverageSummary({ prescriptionId, insuranceProvi
     return { error: { status: 403, message: "Insurance inactive. Please contact RSSB." } };
   }
 
+  // FIFO: query all lots per variant, sorted oldest expiry first
   const inventoryRecords = await Inventory.find({
     pharmacyId: pharmacyUser.pharmacyProfileId,
     medicineVariantId: {
       $in: prescription.medications.map((item) => item.medicineVariantId._id),
     },
-  }).select("medicineVariantId priceRWF stockStatus");
+    quantity: { $gt: 0 },
+  })
+    .sort({ expiryDate: 1 })
+    .select("medicineVariantId priceRWF stockStatus quantity expiryDate batchNumber");
 
-  const inventoryMap = new Map(
-    inventoryRecords.map((record) => [String(record.medicineVariantId), record])
-  );
+  // Group lots by variant for FIFO iteration
+  const inventoryMap = new Map();
+  inventoryRecords.forEach((record) => {
+    const key = String(record.medicineVariantId);
+    if (!inventoryMap.has(key)) inventoryMap.set(key, []);
+    inventoryMap.get(key).push(record);
+  });
 
   const lineItems = [];
   let totalAmountRWF = 0;
   let coveredAmountRWF = 0;
 
   for (const medication of prescription.medications) {
-    const inventoryRecord = inventoryMap.get(String(medication.medicineVariantId._id));
+    const lots = inventoryMap.get(String(medication.medicineVariantId._id));
 
-    if (!inventoryRecord) {
+    if (!lots || lots.length === 0) {
       return {
         error: {
           status: 400,
@@ -94,14 +103,19 @@ async function buildPrescriptionCoverageSummary({ prescriptionId, insuranceProvi
       };
     }
 
-    if (inventoryRecord.stockStatus === "Out of Stock") {
+    // FIFO total availability check across all lots
+    const totalAvailable = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+    if (totalAvailable < medication.quantity) {
       return {
         error: {
           status: 400,
-          message: `${medication.medicineVariantId.medicineGroupId.genericName} ${medication.medicineVariantId.dosage} ${medication.medicineVariantId.form} is out of stock.`,
+          message: `${medication.medicineVariantId.medicineGroupId.genericName} ${medication.medicineVariantId.dosage} ${medication.medicineVariantId.form} has insufficient stock (need ${medication.quantity}, have ${totalAvailable}).`,
         },
       };
     }
+
+    // Use the oldest lot's price for billing
+    const inventoryRecord = lots[0];
 
     const breakdown = calculateCoverageBreakdown({
       unitPriceRWF: inventoryRecord.priceRWF,
@@ -126,6 +140,10 @@ async function buildPrescriptionCoverageSummary({ prescriptionId, insuranceProvi
       patientPaysRWF: breakdown.patientPaysRWF,
     });
   }
+
+  console.log("--- MATH AUDIT ---");
+  console.log("Line Items:", lineItems);
+  console.log("Calculated Total:", totalAmountRWF);
 
   return {
     pharmacyUser,
@@ -294,31 +312,82 @@ export const submitClaim = async (req, res) => {
       });
     }
 
-    const claim = await Claim.create({
-      claimId: buildClaimId(),
-      pharmacyId: req.user.id,
-      prescriptionId,
-      insuranceProviderId,
-      totalAmountRWF: summary.totals.totalAmountRWF,
-      coveredAmountRWF: summary.totals.coveredAmountRWF,
-      patientPaysRWF: summary.totals.patientPaysRWF,
-      status: "Approved",
-      submittedAt: new Date(),
-    });
+    try {
+      const medicineSnapshot = summary.prescription.medications.map((item) => ({
+        name: item.medicineVariantId.medicineGroupId.genericName,
+        category: item.medicineVariantId.medicineGroupId.category,
+        standardizedCode: `${item.medicineVariantId.sku}-${item.medicineVariantId.dosage}`,
+        quantity: item.quantity,
+      }));
 
-    summary.prescription.status = "Fulfilled";
-    await summary.prescription.save();
+      const claim = await Claim.create({
+        claimId: buildClaimId(),
+        pharmacyId: req.user.id,
+        prescriptionId,
+        insuranceProviderId,
+        patientName: summary.prescription.patientId.fullName,
+        insurerName: summary.provider.name,
+        approvalTimeHours: 0,
+        totalAmountRWF: summary.totals.totalAmountRWF,
+        coveredAmountRWF: summary.totals.coveredAmountRWF,
+        patientPaysRWF: summary.totals.patientPaysRWF,
+        status: "Pending", 
+        medicineSnapshot,
+        submittedAt: new Date(),
+      });
 
-    return res.status(201).json({
-      message: `Claim ${claim.claimId} Submitted Successfully.`,
-      claim: {
-        id: claim._id,
-        claimId: claim.claimId,
-        status: claim.status,
-        submittedAt: claim.submittedAt,
-      },
-      breakdown: summary.totals,
-    });
+      // ─── FIFO DISPENSING: deduct from oldest-expiry lots first ───
+      for (const item of summary.prescription.medications) {
+        let remainingToDeduct = item.quantity;
+        const lots = await Inventory.find({
+          pharmacyId: summary.pharmacyUser.pharmacyProfileId,
+          medicineVariantId: item.medicineVariantId._id,
+          quantity: { $gt: 0 },
+        }).sort({ expiryDate: 1 }); // Oldest expiry first
+
+        for (const lot of lots) {
+          if (remainingToDeduct <= 0) break;
+
+          const deductFromThisLot = Math.min(lot.quantity, remainingToDeduct);
+          lot.quantity -= deductFromThisLot;
+          remainingToDeduct -= deductFromThisLot;
+
+          if (lot.quantity <= 0) {
+            lot.stockStatus = "Out of Stock";
+          } else if (lot.quantity < 20) {
+            lot.stockStatus = "Low Stock";
+          }
+          await lot.save();
+
+          // Non-blocking FDA traceability event
+          traceabilityGateway.emit("inventory_mutated", {
+            pharmacyId: String(summary.pharmacyUser.pharmacyProfileId),
+            variantId: String(item.medicineVariantId._id),
+            changeType: "DISPENSED",
+            quantityDelta: -deductFromThisLot,
+            batchNumber: lot.batchNumber,
+          });
+        }
+      }
+
+      summary.prescription.status = "Fulfilled";
+      await summary.prescription.save();
+
+      return res.status(201).json({
+        message: `Claim ${claim.claimId} Submitted Successfully.`,
+        claim: {
+          id: claim._id,
+          claimId: claim.claimId,
+          status: claim.status,
+          submittedAt: claim.submittedAt,
+        },
+        breakdown: summary.totals,
+      });
+
+    } catch (dbError) {
+      console.error("Database operation failed during claim submission:", dbError);
+      return res.status(500).json({ message: "Failed to securely execute claim submission. Transaction aborted." });
+    }
   } catch (error) {
     console.error("Claim submission failed", error);
     return res.status(500).json({ message: "Unable to submit claim right now." });

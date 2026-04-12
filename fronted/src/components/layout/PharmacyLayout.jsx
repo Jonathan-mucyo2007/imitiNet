@@ -12,9 +12,9 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/AuthContext";
 
 const sidebarItems = [
-  { label: "Claim Dashboard", icon: ReceiptText, to: "/dashboard/pharmacy", disabled: true },
+  { label: "Claim Dashboard", icon: ReceiptText, to: "/dashboard/pharmacy" },
   { label: "New Claim Submission", icon: FileCheck2, to: "/dashboard/pharmacy/claims/new" },
-  { label: "Inventory Management", icon: Boxes, to: "/dashboard/pharmacy/inventory", disabled: true },
+  { label: "Inventory Management", icon: Boxes, to: "/dashboard/pharmacy/inventory" },
   { label: "Pharmacy Settings", icon: Settings2, to: "/dashboard/pharmacy/settings", disabled: true },
 ];
 

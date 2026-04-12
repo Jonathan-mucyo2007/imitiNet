@@ -408,7 +408,7 @@ function NewClaim() {
                             </p>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                             <div className="rounded-2xl bg-white px-4 py-3">
                               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
                                 Qty
@@ -419,18 +419,26 @@ function NewClaim() {
                             </div>
                             <div className="rounded-2xl bg-white px-4 py-3">
                               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                                Base Price
+                                Unit Price
                               </p>
                               <p className="mt-2 text-sm font-semibold text-slate-900">
-                                {formatCurrency(medication.basePrice)}
+                                {formatCurrency(medication.inventoryPriceRWF)}
                               </p>
                             </div>
                             <div className="rounded-2xl bg-white px-4 py-3">
                               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                                Category
+                                Line Total
                               </p>
                               <p className="mt-2 text-sm font-semibold text-slate-900">
-                                {medication.category}
+                                {formatCurrency(medication.inventoryPriceRWF * medication.quantity)}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl bg-white px-4 py-3">
+                              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                                Stock
+                              </p>
+                              <p className={`mt-2 text-sm font-semibold ${medication.stockStatus === "Out of Stock" ? "text-rose-600" : medication.stockStatus === "Low Stock" ? "text-amber-600" : "text-emerald-600"}`}>
+                                {medication.stockStatus}
                               </p>
                             </div>
                           </div>

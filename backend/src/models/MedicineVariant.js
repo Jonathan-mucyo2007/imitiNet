@@ -8,6 +8,12 @@ const medicineVariantSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    sku: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
     dosage: {
       type: String,
       required: true,

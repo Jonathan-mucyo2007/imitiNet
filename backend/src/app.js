@@ -5,6 +5,9 @@ import inventoryRoutes from "./routes/inventoryRoutes.js";
 import claimsRoutes from "./routes/claimsRoutes.js";
 import patientRoutes from "./routes/patientRoutes.js";
 import prescriptionRoutes from "./routes/prescriptionRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
+import pharmacyInventoryRoutes from "./routes/pharmacyInventoryRoutes.js";
+import insurerRoutes from "./routes/insurerRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -26,6 +29,9 @@ export function createApp() {
   app.use("/api/prescriptions", prescriptionRoutes);
   app.use("/api/inventory", inventoryRoutes);
   app.use("/api/claims", claimsRoutes);
+  app.use("/api/pharmacy/dashboard", dashboardRoutes);
+  app.use("/api/pharmacy/inventory", pharmacyInventoryRoutes);
+  app.use("/api/insurer", insurerRoutes);
 
   app.use((err, _req, res, _next) => {
     console.error(err);

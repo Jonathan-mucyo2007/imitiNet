@@ -76,9 +76,9 @@ const medicineGroups = [
     category: "Pain Relief",
     description: "Common analgesic and fever reducer used for mild to moderate pain.",
     variants: [
-      { dosage: "250mg", form: "Tablet", basePrice: 500 },
-      { dosage: "500mg", form: "Tablet", basePrice: 800 },
-      { dosage: "120mg/5ml", form: "Syrup", basePrice: 1400 },
+      { dosage: "250mg", form: "Tablet", basePrice: 500, sku: "PARA-250-TAB" },
+      { dosage: "500mg", form: "Tablet", basePrice: 800, sku: "PARA-500-TAB" },
+      { dosage: "120mg/5ml", form: "Syrup", basePrice: 1400, sku: "PARA-120-SYR" },
     ],
   },
   {
@@ -86,8 +86,8 @@ const medicineGroups = [
     category: "Pain Relief",
     description: "Anti-inflammatory medicine for pain, swelling, and fever relief.",
     variants: [
-      { dosage: "200mg", form: "Tablet", basePrice: 950 },
-      { dosage: "400mg", form: "Tablet", basePrice: 1200 },
+      { dosage: "200mg", form: "Tablet", basePrice: 950, sku: "IBUP-200-TAB" },
+      { dosage: "400mg", form: "Tablet", basePrice: 1200, sku: "IBUP-400-TAB" },
     ],
   },
   {
@@ -95,8 +95,8 @@ const medicineGroups = [
     category: "Pain Relief",
     description: "NSAID often used for joint pain and inflammatory conditions.",
     variants: [
-      { dosage: "50mg", form: "Tablet", basePrice: 1800 },
-      { dosage: "75mg/3ml", form: "Injection", basePrice: 2600 },
+      { dosage: "50mg", form: "Tablet", basePrice: 1800, sku: "DICL-050-TAB" },
+      { dosage: "75mg/3ml", form: "Injection", basePrice: 2600, sku: "DICL-075-INJ" },
     ],
   },
   {
@@ -104,9 +104,9 @@ const medicineGroups = [
     category: "Antibiotics",
     description: "Broad-spectrum antibiotic commonly prescribed for bacterial infections.",
     variants: [
-      { dosage: "250mg", form: "Capsule", basePrice: 1500 },
-      { dosage: "500mg", form: "Capsule", basePrice: 2200 },
-      { dosage: "125mg/5ml", form: "Suspension", basePrice: 2800 },
+      { dosage: "250mg", form: "Capsule", basePrice: 1500, sku: "AMOX-250-CAP" },
+      { dosage: "500mg", form: "Capsule", basePrice: 2200, sku: "AMOX-500-CAP" },
+      { dosage: "125mg/5ml", form: "Suspension", basePrice: 2800, sku: "AMOX-125-SUS" },
     ],
   },
   {
@@ -114,7 +114,7 @@ const medicineGroups = [
     category: "Antibiotics",
     description: "Antibiotic used for respiratory infections, acne, and selected tropical diseases.",
     variants: [
-      { dosage: "100mg", form: "Capsule", basePrice: 2500 },
+      { dosage: "100mg", form: "Capsule", basePrice: 2500, sku: "DOXY-100-CAP" },
     ],
   },
   {
@@ -122,8 +122,8 @@ const medicineGroups = [
     category: "Antibiotics",
     description: "Macrolide antibiotic often dispensed as short-course therapy.",
     variants: [
-      { dosage: "250mg", form: "Tablet", basePrice: 4200 },
-      { dosage: "500mg", form: "Tablet", basePrice: 5800 },
+      { dosage: "250mg", form: "Tablet", basePrice: 4200, sku: "AZIT-250-TAB" },
+      { dosage: "500mg", form: "Tablet", basePrice: 5800, sku: "AZIT-500-TAB" },
     ],
   },
   {
@@ -131,8 +131,8 @@ const medicineGroups = [
     category: "Vitamins",
     description: "Supplement used to support immunity and nutritional recovery.",
     variants: [
-      { dosage: "500mg", form: "Tablet", basePrice: 700 },
-      { dosage: "1000mg", form: "Tablet", basePrice: 900 },
+      { dosage: "500mg", form: "Tablet", basePrice: 700, sku: "VITC-500-TAB" },
+      { dosage: "1000mg", form: "Tablet", basePrice: 900, sku: "VITC-1KG-TAB" },
     ],
   },
   {
@@ -140,7 +140,7 @@ const medicineGroups = [
     category: "Vitamins",
     description: "Daily multivitamin supplement for general wellness support.",
     variants: [
-      { dosage: "Daily", form: "Tablet", basePrice: 2500 },
+      { dosage: "Daily", form: "Tablet", basePrice: 2500, sku: "MULT-DLY-TAB" },
     ],
   },
   {
@@ -148,8 +148,8 @@ const medicineGroups = [
     category: "Vitamins",
     description: "Mineral supplement frequently used in recovery and immune support plans.",
     variants: [
-      { dosage: "10mg", form: "Tablet", basePrice: 900 },
-      { dosage: "20mg", form: "Tablet", basePrice: 1300 },
+      { dosage: "10mg", form: "Tablet", basePrice: 900, sku: "ZINC-010-TAB" },
+      { dosage: "20mg", form: "Tablet", basePrice: 1300, sku: "ZINC-020-TAB" },
     ],
   },
   {
@@ -157,7 +157,7 @@ const medicineGroups = [
     category: "Cough & Cold",
     description: "Cough syrup used to relieve throat irritation and cough symptoms.",
     variants: [
-      { dosage: "100ml", form: "Syrup", basePrice: 2000 },
+      { dosage: "100ml", form: "Syrup", basePrice: 2000, sku: "BENY-100-SYR" },
     ],
   },
   {
@@ -165,8 +165,8 @@ const medicineGroups = [
     category: "Cough & Cold",
     description: "Antihistamine commonly used for allergy-related cold symptoms.",
     variants: [
-      { dosage: "10mg", form: "Tablet", basePrice: 1700 },
-      { dosage: "5mg/5ml", form: "Syrup", basePrice: 2100 },
+      { dosage: "10mg", form: "Tablet", basePrice: 1700, sku: "CETI-010-TAB" },
+      { dosage: "5mg/5ml", form: "Syrup", basePrice: 2100, sku: "CETI-005-SYR" },
     ],
   },
   {
@@ -174,8 +174,8 @@ const medicineGroups = [
     category: "Cough & Cold",
     description: "Bronchodilator used to relieve wheezing and breathing difficulty.",
     variants: [
-      { dosage: "100mcg", form: "Inhaler", basePrice: 3200 },
-      { dosage: "2mg/5ml", form: "Syrup", basePrice: 2600 },
+      { dosage: "100mcg", form: "Inhaler", basePrice: 3200, sku: "SALB-100-INH" },
+      { dosage: "2mg/5ml", form: "Syrup", basePrice: 2600, sku: "SALB-002-SYR" },
     ],
   },
   {
@@ -183,8 +183,8 @@ const medicineGroups = [
     category: "Digestion",
     description: "Acid-reducing medicine used for ulcers, reflux, and gastritis.",
     variants: [
-      { dosage: "20mg", form: "Capsule", basePrice: 2600 },
-      { dosage: "40mg", form: "Capsule", basePrice: 3400 },
+      { dosage: "20mg", form: "Capsule", basePrice: 2600, sku: "OMEP-020-CAP" },
+      { dosage: "40mg", form: "Capsule", basePrice: 3400, sku: "OMEP-040-CAP" },
     ],
   },
   {
@@ -192,8 +192,8 @@ const medicineGroups = [
     category: "Digestion",
     description: "Oral rehydration salts for dehydration caused by diarrhea or vomiting.",
     variants: [
-      { dosage: "Single Sachet", form: "Powder", basePrice: 700 },
-      { dosage: "Box of 10", form: "Powder", basePrice: 6200 },
+      { dosage: "Single Sachet", form: "Powder", basePrice: 700, sku: "ORSS-001-PWD" },
+      { dosage: "Box of 10", form: "Powder", basePrice: 6200, sku: "ORSS-010-PWD" },
     ],
   },
   {
@@ -201,8 +201,8 @@ const medicineGroups = [
     category: "Digestion",
     description: "Antimicrobial medicine frequently used for gastrointestinal infections.",
     variants: [
-      { dosage: "200mg", form: "Tablet", basePrice: 1500 },
-      { dosage: "400mg", form: "Tablet", basePrice: 2100 },
+      { dosage: "200mg", form: "Tablet", basePrice: 1500, sku: "METR-200-TAB" },
+      { dosage: "400mg", form: "Tablet", basePrice: 2100, sku: "METR-400-TAB" },
     ],
   },
   {
@@ -210,7 +210,7 @@ const medicineGroups = [
     category: "Pain Relief",
     description: "Branded paracetamol line used for pain and fever reduction.",
     variants: [
-      { dosage: "500mg", form: "Tablet", basePrice: 1000 },
+      { dosage: "500mg", form: "Tablet", basePrice: 1000, sku: "PNDL-500-TAB" },
     ],
   },
   {
@@ -218,8 +218,8 @@ const medicineGroups = [
     category: "Cough & Cold",
     description: "General cough relief syrup available in child and adult strengths.",
     variants: [
-      { dosage: "60ml", form: "Syrup", basePrice: 1600 },
-      { dosage: "120ml", form: "Syrup", basePrice: 2300 },
+      { dosage: "60ml", form: "Syrup", basePrice: 1600, sku: "CGHS-060-SYR" },
+      { dosage: "120ml", form: "Syrup", basePrice: 2300, sku: "CGHS-120-SYR" },
     ],
   },
   {
@@ -227,7 +227,7 @@ const medicineGroups = [
     category: "Vitamins",
     description: "Supplement commonly dispensed in antenatal and anemia support care.",
     variants: [
-      { dosage: "5mg", form: "Tablet", basePrice: 1100 },
+      { dosage: "5mg", form: "Tablet", basePrice: 1100, sku: "FOLC-005-TAB" },
     ],
   },
   {
@@ -235,8 +235,8 @@ const medicineGroups = [
     category: "Antibiotics",
     description: "Broad-spectrum antibiotic reserved for selected bacterial infections.",
     variants: [
-      { dosage: "250mg", form: "Tablet", basePrice: 3200 },
-      { dosage: "500mg", form: "Tablet", basePrice: 4600 },
+      { dosage: "250mg", form: "Tablet", basePrice: 3200, sku: "CIPR-250-TAB" },
+      { dosage: "500mg", form: "Tablet", basePrice: 4600, sku: "CIPR-500-TAB" },
     ],
   },
   {
@@ -244,7 +244,23 @@ const medicineGroups = [
     category: "Digestion",
     description: "Anti-diarrheal medicine used for short-term symptom control.",
     variants: [
-      { dosage: "2mg", form: "Capsule", basePrice: 1500 },
+      { dosage: "2mg", form: "Capsule", basePrice: 1500, sku: "LOPE-002-CAP" },
+    ],
+  },
+  {
+    genericName: "Artemether-Lumefantrin",
+    category: "Anti-Malarial",
+    description: "First-line ACT combination therapy for uncomplicated malaria.",
+    variants: [
+      { dosage: "20/120mg", form: "Tablet", basePrice: 3500, sku: "ARTL-020-TAB" },
+    ],
+  },
+  {
+    genericName: "Zinc Sulphate Syrup",
+    category: "Vitamins",
+    description: "Zinc supplement syrup used in pediatric diarrhea management.",
+    variants: [
+      { dosage: "10mg/5ml", form: "Syrup", basePrice: 1800, sku: "ZNCS-010-SYR" },
     ],
   },
 ];
@@ -288,24 +304,23 @@ const users = [
     role: "pharmacy",
     facilityId: "PHARM-KGL-CENTRAL",
   },
+  {
+    fullName: "RSSB Lead Administrator",
+    email: "rssb@gmail.com",
+    password: "rssb@2026",
+    role: "insurer",
+    facilityId: "RSSB-HQ-001",
+  },
 ];
-
-const stockStatuses = ["In Stock", "Low Stock", "Out of Stock"];
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function pickRandomStatus() {
-  const roll = Math.random();
-  if (roll < 0.65) {
-    return "In Stock";
-  }
-  if (roll < 0.88) {
-    return "Low Stock";
-  }
-  return "Out of Stock";
-}
+const locations = [
+  "Shelf A1", "Shelf A2", "Shelf B1", "Shelf B2",
+  "Shelf C1", "Shelf C3", "Refrigerator B2", "Refrigerator A1",
+];
 
 async function seedDatabase() {
   try {
@@ -356,28 +371,26 @@ async function seedDatabase() {
         dosage: variant.dosage,
         form: variant.form,
         basePrice: variant.basePrice,
+        sku: variant.sku,
       }));
     });
 
     const createdVariants = await MedicineVariant.insertMany(variantDocuments);
 
+    // ─── Enhanced Inventory Seeding with Traceability ───
     const inventoryDocuments = [];
+    const now = new Date();
 
-    createdPharmacies.forEach((pharmacy) => {
-      createdVariants.forEach((variant) => {
-        if (Math.random() < 0.68) {
-          const variance = randomInt(-300, 1800);
-          inventoryDocuments.push({
-            pharmacyId: pharmacy._id,
-            medicineVariantId: variant._id,
-            stockStatus: pickRandomStatus(),
-            priceRWF: Math.max(500, variant.basePrice + variance),
-          });
-        }
-      });
-    });
-
-    await Inventory.insertMany(inventoryDocuments);
+    // Define edge-case variants for Kigali Central (pharmacy[0])
+    const lowStockSKUs = new Set([
+      "AMOX-250-CAP", "DICL-075-INJ", "DOXY-100-CAP",
+      "AZIT-500-TAB", "LOPE-002-CAP", "ARTL-020-TAB",
+      "CETI-005-SYR", "METR-400-TAB",
+    ]);
+    const expiringSoonSKUs = new Set([
+      "IBUP-400-TAB", "PARA-120-SYR", "BENY-100-SYR",
+      "OMEP-020-CAP", "ZNCS-010-SYR",
+    ]);
 
     const createdUsers = await User.create(
       users.map((user) => ({
@@ -386,6 +399,58 @@ async function seedDatabase() {
           user.role === "pharmacy" ? createdPharmacies[0]._id : undefined,
       }))
     );
+
+    const kigaliAdmin = createdUsers.find(u => u.email === "pharmacy.admin@imitinet.rw");
+
+    let batchCounter = 0;
+
+    createdPharmacies.forEach((pharmacy, pharmacyIndex) => {
+      createdVariants.forEach((variant) => {
+        if (Math.random() < 0.72) {
+          batchCounter++;
+          const variance = randomInt(-300, 1800);
+          const isKigaliCentral = pharmacyIndex === 0;
+          const sku = variant.sku;
+
+          let quantity;
+          let expiryDate;
+
+          if (isKigaliCentral && lowStockSKUs.has(sku)) {
+            // Low stock: 3-18 units
+            quantity = randomInt(3, 18);
+            expiryDate = new Date(now);
+            expiryDate.setMonth(expiryDate.getMonth() + randomInt(8, 24));
+          } else if (isKigaliCentral && expiringSoonSKUs.has(sku)) {
+            // Expiring soon: < 3 months
+            quantity = randomInt(30, 100);
+            expiryDate = new Date(now);
+            expiryDate.setDate(expiryDate.getDate() + randomInt(15, 85));
+          } else {
+            quantity = randomInt(20, 200);
+            expiryDate = new Date(now);
+            expiryDate.setMonth(expiryDate.getMonth() + randomInt(6, 36));
+          }
+
+          let stockStatus = "In Stock";
+          if (quantity < 20) stockStatus = "Low Stock";
+          if (quantity <= 0) stockStatus = "Out of Stock";
+
+          inventoryDocuments.push({
+            pharmacyId: isKigaliCentral ? kigaliAdmin._id : pharmacy._id,
+            medicineVariantId: variant._id,
+            batchNumber: `BATCH-${String(batchCounter).padStart(4, "0")}`,
+            stockStatus,
+            quantity,
+            priceRWF: Math.max(500, variant.basePrice + variance),
+            expiryDate,
+            location: locations[randomInt(0, locations.length - 1)],
+          });
+        }
+      });
+    });
+
+    await Inventory.insertMany(inventoryDocuments);
+
 
     const findVariant = (genericName, dosage, form) =>
       createdVariants.find((variant) => {
@@ -459,10 +524,70 @@ async function seedDatabase() {
       },
     ];
 
-    await Prescription.insertMany(prescriptions);
+    const insertedPrescriptions = await Prescription.insertMany(prescriptions);
+
+    const claimDocuments = [];
+    const statuses = ["Approved", "Pending", "Rejected"];
+
+    const targetPharmacy = createdUsers.find((u) => u.role === "pharmacy");
+    const patientUsers = createdUsers.filter((u) => u.role === "patient");
+    const insurerDocs = createdInsurers;
+
+    for (let i = 0; i < 75; i++) {
+      const claimStatus = statuses[Math.floor(Math.random() * statuses.length)];
+      const submittedAt = new Date();
+      submittedAt.setDate(submittedAt.getDate() - Math.floor(Math.random() * 7));
+      submittedAt.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
+
+      const totalAmountRWF = Math.floor(Math.random() * 15000) + 1500;
+      const coveragePercentage = Math.random() < 0.5 ? 85 : 100;
+      const coveredAmountRWF = Math.round((totalAmountRWF * coveragePercentage) / 100);
+      const patientPaysRWF = totalAmountRWF - coveredAmountRWF;
+
+      let approvalTimeHours = 0;
+      if (claimStatus !== "Pending") {
+        approvalTimeHours = Math.floor(Math.random() * 24) + 12;
+      }
+
+      const selectedPatient = patientUsers[Math.floor(Math.random() * patientUsers.length)];
+      const selectedInsurer = insurerDocs[Math.floor(Math.random() * insurerDocs.length)];
+
+      const selectedVariant = createdVariants[Math.floor(Math.random() * createdVariants.length)];
+      const selectedGroup = createdMedicineGroups.find(g => String(g._id) === String(selectedVariant.medicineGroupId));
+      
+      const paymentChannels = ["Bank Transfer", "MTN MoMo", "Airtel Money", "Internal Check"];
+      const selectedPaymentChannel = paymentChannels[Math.floor(Math.random() * paymentChannels.length)];
+
+      const medicineSnapshot = [{
+        name: selectedGroup.genericName,
+        category: selectedGroup.category,
+        system: ["Antibiotics", "Pain Relief", "Anti-Malarial"].includes(selectedGroup.category) ? "ATC" : "MoH-RW",
+        standardizedCode: `${selectedVariant.sku}-${selectedVariant.dosage}`,
+        quantity: Math.floor(Math.random() * 5) + 1,
+      }];
+
+      claimDocuments.push({
+        claimId: `CLM-${Math.floor(10000 + Math.random() * 90000)}`,
+        pharmacyId: targetPharmacy._id,
+        prescriptionId: insertedPrescriptions[Math.floor(Math.random() * insertedPrescriptions.length)]._id,
+        insuranceProviderId: selectedInsurer._id,
+        patientName: selectedPatient.fullName,
+        insurerName: selectedInsurer.name,
+        approvalTimeHours,
+        totalAmountRWF,
+        coveredAmountRWF,
+        patientPaysRWF,
+        paymentChannel: selectedPaymentChannel,
+        status: claimStatus,
+        medicineSnapshot,
+        submittedAt,
+      });
+    }
+
+    await Claim.insertMany(claimDocuments);
 
     console.log(
-      `Seed complete: ${createdUsers.length} users, ${createdPharmacies.length} pharmacies, ${createdMedicineGroups.length} medicine groups, ${createdVariants.length} variants, ${createdInsurers.length} insurers, ${inventoryDocuments.length} inventory records, ${prescriptions.length} prescriptions`
+      `Seed complete: ${createdUsers.length} users, ${createdPharmacies.length} pharmacies, ${createdMedicineGroups.length} medicine groups, ${createdVariants.length} variants, ${createdInsurers.length} insurers, ${inventoryDocuments.length} inventory records, ${prescriptions.length} prescriptions, ${claimDocuments.length} claims`
     );
   } catch (error) {
     console.error("Seeding failed", error);

@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
 
+const medicineSnapshotSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true }, // Mirrors FHIR CodeableConcept 'display'
+    category: { type: String, required: true },
+    system: { type: String, default: "MoH-RW" }, // Mirrors FHIR CodeableConcept 'system'
+    standardizedCode: { type: String, required: true }, // Mirrors FHIR CodeableConcept 'code'
+    quantity: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
 const claimSchema = new mongoose.Schema(
   {
     claimId: {
@@ -25,6 +36,19 @@ const claimSchema = new mongoose.Schema(
       ref: "InsuranceProvider",
       required: true,
     },
+    patientName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    insurerName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    approvalTimeHours: {
+      type: Number,
+    },
     totalAmountRWF: {
       type: Number,
       required: true,
@@ -40,10 +64,19 @@ const claimSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    paymentChannel: {
+      type: String,
+      enum: ["Bank Transfer", "MTN MoMo", "Airtel Money", "Internal Check"],
+      default: "Bank Transfer",
+    },
     status: {
       type: String,
       enum: ["Pending", "Approved", "Rejected"],
       default: "Pending",
+    },
+    medicineSnapshot: {
+      type: [medicineSnapshotSchema],
+      default: [],
     },
     submittedAt: {
       type: Date,
@@ -54,6 +87,10 @@ const claimSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+claimSchema.index({ pharmacyId: 1, submittedAt: -1 });
+claimSchema.index({ pharmacyId: 1, status: 1 });
+claimSchema.index({ insuranceProviderId: 1, submittedAt: -1, status: 1 });
 
 const Claim = mongoose.model("Claim", claimSchema);
 
