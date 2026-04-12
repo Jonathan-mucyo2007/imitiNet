@@ -78,13 +78,26 @@ const getQuarterBoundaries = () => {
 
 export const getDashboardStats = async (req, res) => {
   try {
+    const { search } = req.query;
     const rssbProviders = await InsuranceProvider.find({ name: /RSSB/i });
     const providerIds = rssbProviders.map((p) => p._id);
 
     const { currentQStartUTC, prevQStartUTC } = getQuarterBoundaries();
 
+    // Omni-Search Logic for Claims Table
+    const recentClaimMatch = { insuranceProviderId: { $in: providerIds } };
+    if (search) {
+      const regex = new RegExp(search, "i");
+      recentClaimMatch.$or = [
+        { claimId: regex },
+        { patientName: regex },
+        { "medicineSnapshot.name": regex },
+        { "medicineSnapshot.standardizedCode": regex }
+      ];
+    }
+
     // Fire recentClaims asynchronously in parallel with the heavy aggregation
-    const recentClaimsPromise = Claim.find({ insuranceProviderId: { $in: providerIds } })
+    const recentClaimsPromise = Claim.find(recentClaimMatch)
       .select('claimId patientName pharmacyId insurerName approvalTimeHours totalAmountRWF coveredAmountRWF patientPaysRWF status medicineSnapshot submittedAt paymentChannel')
       .populate('pharmacyId', 'fullName facilityId')
       .sort({ submittedAt: -1 })

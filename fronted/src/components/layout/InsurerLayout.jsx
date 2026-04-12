@@ -52,12 +52,6 @@ const InsurerLayout = ({ children }) => {
     navigate("/login/insurer");
   };
 
-  const navLinks = [
-    { name: "Dashboard", path: "/dashboard/insurer", icon: LayoutDashboard },
-    { name: "Onboarding", path: "/dashboard/insurer/onboarding", icon: UserPlus },
-    { name: "Fraud Alerts", path: "/dashboard/insurer/alerts", icon: ShieldAlert },
-  ];
-
   const portalLinks = [
     { name: "Claims Overview", path: "/dashboard/insurer/claims", icon: FileText },
     { name: "Pharmacy Network", path: "/dashboard/insurer/network", icon: Network },
@@ -76,36 +70,14 @@ const InsurerLayout = ({ children }) => {
             <span className="text-xl font-bold text-slate-800 font-display tracking-tight">ImitiNet</span>
           </div>
 
-          {/* Main Navigation */}
-          <nav className="p-4 space-y-1">
-            {navLinks.map((link) => {
-              const isActive = location.pathname === link.path;
-              const Icon = link.icon;
-              return (
-                <Link
-                  key={link.name}
-                  to={link.path}
-                  className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive 
-                      ? "bg-blue-50 text-blue-700" 
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                  {link.name}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Portal Navigation */}
-          <div className="mt-4">
+          {/* Portal Navigation Only */}
+          <div className="mt-6">
             <h3 className="px-7 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
               Insurer Portal
             </h3>
             <nav className="px-4 space-y-1">
               {portalLinks.map((link) => {
-                const isActive = location.pathname === link.path;
+                const isActive = location.pathname === link.path || (link.name === "Claims Overview" && location.pathname === "/dashboard/insurer");
                 const Icon = link.icon;
                 return (
                   <Link

@@ -95,6 +95,17 @@ const InsurerDashboard = () => {
 
   const [realTimeAlerts, setRealTimeAlerts] = useState([]);
 
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    setIsSearching(true);
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
   useEffect(() => {
     const socket = io("http://localhost:5000", { withCredentials: true });
 
@@ -102,21 +113,25 @@ const InsurerDashboard = () => {
       setRealTimeAlerts((prev) => [fraudData, ...prev]);
     });
 
+    return () => socket.disconnect();
+  }, []);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await api.get("/insurer/dashboard");
+        const query = debouncedSearch ? `?search=${encodeURIComponent(debouncedSearch)}` : "";
+        const response = await api.get(`/insurer/dashboard${query}`);
         setData(response.data);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
         setLoading(false);
+        setIsSearching(false);
       }
     };
 
     fetchData();
-
-    return () => socket.disconnect();
-  }, []);
+  }, [debouncedSearch]);
 
   const triggerFraudTest = async () => {
     try {
@@ -369,8 +384,11 @@ const InsurerDashboard = () => {
                placeholder="Search registry..."
                value={searchTerm}
                onChange={(e) => setSearchTerm(e.target.value)}
-               className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-full sm:w-64"
+               className="pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-full sm:w-64"
              />
+             {isSearching && (
+               <Activity className="h-4 w-4 absolute right-3 top-2.5 text-blue-500 animate-spin" />
+             )}
            </div>
         </div>
         <div className="overflow-x-auto max-h-[500px]">
@@ -385,14 +403,7 @@ const InsurerDashboard = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {recentClaims?.filter(claim => {
-                if (!searchTerm) return true;
-                const term = searchTerm.toLowerCase();
-                return (
-                  claim?.claimId?.toLowerCase().includes(term) ||
-                  claim?.patientName?.toLowerCase().includes(term)
-                );
-              }).map((claim, idx) => {
+              {recentClaims?.map((claim, idx) => {
                 // Safely extract the primary snapshot item
                 const primaryMeds = claim.medicineSnapshot?.[0];
 
@@ -433,9 +444,15 @@ const InsurerDashboard = () => {
               })}
             </tbody>
           </table>
-          {recentClaims?.length === 0 && (
+          {recentClaims?.length === 0 && !isSearching && (
             <div className="text-center py-12">
-              <p className="text-slate-500 text-sm font-medium">Registry is currently empty.</p>
+              <p className="text-slate-500 text-sm font-medium">No claims found matching '{searchTerm}'.</p>
+            </div>
+          )}
+          {recentClaims?.length === 0 && isSearching && (
+            <div className="text-center py-12 flex justify-center items-center flex-col gap-3">
+              <Activity className="h-6 w-6 text-blue-500 animate-spin" />
+              <p className="text-slate-500 text-sm font-medium">Scanning claims database...</p>
             </div>
           )}
         </div>
