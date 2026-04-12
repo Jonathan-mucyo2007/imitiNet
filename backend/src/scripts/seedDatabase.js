@@ -8,6 +8,7 @@ import InsuranceProvider from "../models/InsuranceProvider.js";
 import Prescription from "../models/Prescription.js";
 import Claim from "../models/Claim.js";
 import User from "../models/User.js";
+import NationalStatsMaterialized from "../models/NationalStatsMaterialized.js";
 
 dotenv.config({ path: "./.env" });
 
@@ -311,6 +312,12 @@ const users = [
     role: "insurer",
     facilityId: "RSSB-HQ-001",
   },
+  {
+    fullName: "Minisante Chief Regulator",
+    email: "Minisante@gmail.com",
+    password: "minisante@2026",
+    role: "regulator",
+  },
 ];
 
 function randomInt(min, max) {
@@ -585,6 +592,35 @@ async function seedDatabase() {
     }
 
     await Claim.insertMany(claimDocuments);
+
+    // ─── Seed Materialized View Baseline ───
+    await mongoose.connection.dropCollection("nationalstats_materialized").catch(() => null);
+    await NationalStatsMaterialized.create({
+      kpis: { ibitaro: 450, patients: 18000, pharmacyCoverage: 85, medicinesTracked: 2500000 },
+      coverageByRegion: [
+        { region: "Kigali", actualCoverage: 88, targetCoverage: 95 },
+        { region: "South", actualCoverage: 82, targetCoverage: 90 },
+        { region: "East", actualCoverage: 78, targetCoverage: 85 },
+        { region: "West", actualCoverage: 86, targetCoverage: 92 },
+        { region: "North", actualCoverage: 91, targetCoverage: 96 }
+      ],
+      consultationTrends: [
+        { category: "Malaria", cases2025: 450000, cases2026: 400000 },
+        { category: "HIV/AIDS", cases2025: 210000, cases2026: 205000 },
+        { category: "Resp.", cases2025: 320000, cases2026: 350000 },
+        { category: "TB", cases2025: 20000, cases2026: 18000 },
+        { category: "Diabetes", cases2025: 65000, cases2026: 72000 }
+      ],
+      complianceStatus: { compliant: 75, underReview: 15, nonCompliant: 10 },
+      recentSupplyChain: [
+        { medication: "Amoxicillin", status: "Delivered", location: "Kigali Central Pharmacy", time: "10:30" },
+        { medication: "Paracetamol", status: "In Transit", location: "Muhanga District Hospital", time: "15:00" },
+        { medication: "Insulin", status: "Shipped", location: "Rubavu Regional Warehouse", time: "09:15" },
+        { medication: "Antimalarial", status: "Delivered", location: "Gisenyi Health Center", time: "18:45" },
+        { medication: "Vaccine A", status: "Pending Auth.", location: "National Vaccine Cold Store", time: "11:00" }
+      ],
+      facilityPerformance: { patientRatio: "1:500", avgWaitTimeMin: 45, portalUtilization: 78, supplyChainScore: 92 }
+    });
 
     console.log(
       `Seed complete: ${createdUsers.length} users, ${createdPharmacies.length} pharmacies, ${createdMedicineGroups.length} medicine groups, ${createdVariants.length} variants, ${createdInsurers.length} insurers, ${inventoryDocuments.length} inventory records, ${prescriptions.length} prescriptions, ${claimDocuments.length} claims`

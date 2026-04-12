@@ -12,6 +12,7 @@ import DashboardPharmacy from "./pages/pharmacy/Dashboard";
 import InventoryPharmacy from "./pages/pharmacy/Inventory";
 import InsurerDashboard from "./pages/insurer/InsurerDashboard";
 import InsurerLayout from "./components/layout/InsurerLayout";
+import RegulatorLayout from "./components/layout/RegulatorLayout";
 
 function App() {
   return (
@@ -72,7 +73,9 @@ function App() {
         path="/dashboard/regulator"
         element={
           <ProtectedRoute allowedRoles={["regulator"]}>
-            <DashboardPage role="regulator" />
+            <RegulatorLayout>
+              <DashboardPage role="regulator" />
+            </RegulatorLayout>
           </ProtectedRoute>
         }
       />

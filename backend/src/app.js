@@ -8,6 +8,7 @@ import prescriptionRoutes from "./routes/prescriptionRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import pharmacyInventoryRoutes from "./routes/pharmacyInventoryRoutes.js";
 import insurerRoutes from "./routes/insurerRoutes.js";
+import regulatorRoutes from "./routes/regulatorRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -32,6 +33,7 @@ export function createApp() {
   app.use("/api/pharmacy/dashboard", dashboardRoutes);
   app.use("/api/pharmacy/inventory", pharmacyInventoryRoutes);
   app.use("/api/insurer", insurerRoutes);
+  app.use("/api/regulator", regulatorRoutes);
 
   app.use((err, _req, res, _next) => {
     console.error(err);
