@@ -1,22 +1,19 @@
-import mongoose from "mongoose";
 import Prescription from "../models/Prescription.js";
 import User from "../models/User.js";
 import Inventory from "../models/Inventory.js";
 
-export async function getActivePrescriptionForPatient(req, res) {
+export async function getPrescriptionByRetrieveCode(req, res) {
   try {
-    const { id } = req.params;
+    const rxCode = String(req.params.rxCode || "").trim().toUpperCase();
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid patient ID." });
+    if (!rxCode || !/^RX-[A-Z0-9-]+$/.test(rxCode)) {
+      return res.status(404).json({ message: "Invalid or expired RX code." });
     }
 
     const prescription = await Prescription.findOne({
-      patientId: id,
-      status: "Active",
+      prescriptionId: rxCode,
     })
-      .sort({ createdAt: -1 })
-      .populate("patientId", "fullName email nationalId insuranceStatus")
+      .populate("patientId", "fullName insuranceStatus")
       .populate({
         path: "medications.medicineVariantId",
         select: "dosage form basePrice medicineGroupId",
@@ -27,7 +24,13 @@ export async function getActivePrescriptionForPatient(req, res) {
       });
 
     if (!prescription) {
-      return res.status(404).json({ message: "No active prescription found for this patient." });
+      return res.status(404).json({ message: "Invalid or expired RX code." });
+    }
+
+    if (prescription.status !== "Active") {
+      return res.status(403).json({
+        message: "This RX code is no longer available for dispensing.",
+      });
     }
 
     const pharmacyUser = await User.findById(req.user.id).select("pharmacyProfileId");
@@ -49,11 +52,14 @@ export async function getActivePrescriptionForPatient(req, res) {
     return res.status(200).json({
       prescription: {
         id: prescription._id,
-        prescriptionId: prescription.prescriptionId,
-        patient: prescription.patientId,
+        rxCode: prescription.prescriptionId,
+        patient: {
+          fullName: prescription.patientId.fullName,
+        },
         prescribingDoctor: prescription.prescribingDoctor,
         originatingEmr: prescription.originatingEmr,
-        status: prescription.status,
+        status: "Pending Dispense",
+        createdAt: prescription.createdAt,
         medications: prescription.medications.map((item) => {
           const inv = inventoryMap.get(String(item.medicineVariantId._id));
           return {

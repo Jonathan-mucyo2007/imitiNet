@@ -1,4 +1,6 @@
+import mongoose from "mongoose";
 import Inventory from "../models/Inventory.js";
+import Prescription from "../models/Prescription.js";
 import Pharmacy from "../models/Pharmacy.js";
 
 function escapeRegex(value) {
@@ -180,6 +182,90 @@ async function buildSearchResults({ query, category, lat, lng }) {
   }));
 }
 
+async function findNearbyPharmaciesForVariant({
+  medicineVariantId,
+  lat,
+  lng,
+  limit = 3,
+}) {
+  const parsedLat = Number(lat);
+  const parsedLng = Number(lng);
+  const variantObjectId =
+    typeof medicineVariantId === "string" && mongoose.Types.ObjectId.isValid(medicineVariantId)
+      ? new mongoose.Types.ObjectId(medicineVariantId)
+      : medicineVariantId;
+
+  if (!variantObjectId || Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
+    return [];
+  }
+
+  return Pharmacy.aggregate([
+    {
+      $geoNear: {
+        near: {
+          type: "Point",
+          coordinates: [parsedLng, parsedLat],
+        },
+        distanceField: "distanceMeters",
+        spherical: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "inventories",
+        let: { pharmacyObjectId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$pharmacyId", "$$pharmacyObjectId"] },
+                  { $eq: ["$medicineVariantId", variantObjectId] },
+                  { $gt: ["$quantity", 0] },
+                  { $in: ["$stockStatus", ["In Stock", "Low Stock"]] },
+                ],
+              },
+            },
+          },
+          { $sort: { priceRWF: 1, expiryDate: 1 } },
+          { $limit: 1 },
+          {
+            $project: {
+              _id: 1,
+              stockStatus: 1,
+              quantity: 1,
+              priceRWF: 1,
+              expiryDate: 1,
+            },
+          },
+        ],
+        as: "inventoryMatch",
+      },
+    },
+    {
+      $match: {
+        inventoryMatch: { $ne: [] },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        address: 1,
+        contact: 1,
+        rating: 1,
+        imageUrl: 1,
+        location: 1,
+        operatingHours: 1,
+        distanceMeters: 1,
+        inventory: { $arrayElemAt: ["$inventoryMatch", 0] },
+      },
+    },
+    { $sort: { distanceMeters: 1, rating: -1 } },
+    { $limit: limit },
+  ]);
+}
+
 export async function searchInventory(req, res) {
   try {
     const { query = "", category = "All", lat, lng } = req.query;
@@ -189,7 +275,7 @@ export async function searchInventory(req, res) {
       Pharmacy.find({})
         .sort({ rating: -1, createdAt: -1 })
         .limit(6)
-        .select("name address contact rating imageUrl location"),
+        .select("name address contact rating imageUrl location operatingHours"),
     ]);
 
     return res.status(200).json({
@@ -200,6 +286,103 @@ export async function searchInventory(req, res) {
     console.error("Inventory search failed", error);
     return res.status(500).json({
       message: "Unable to search inventory right now",
+    });
+  }
+}
+
+export async function getNearbyPharmaciesForMedicine(req, res) {
+  try {
+    const { medicineVariantId, lat, lng, limit = 6 } = req.query;
+
+    const nearbyPharmacies = await findNearbyPharmaciesForVariant({
+      medicineVariantId,
+      lat,
+      lng,
+      limit: Number(limit) || 6,
+    });
+
+    return res.status(200).json({
+      pharmacies: nearbyPharmacies.map((pharmacy) => ({
+        id: pharmacy._id,
+        name: pharmacy.name,
+        address: pharmacy.address,
+        contact: pharmacy.contact,
+        rating: pharmacy.rating,
+        imageUrl: pharmacy.imageUrl,
+        operatingHours: pharmacy.operatingHours,
+        location: pharmacy.location,
+        distanceKm: Number((pharmacy.distanceMeters / 1000).toFixed(2)),
+        inventory: pharmacy.inventory,
+      })),
+    });
+  } catch (error) {
+    console.error("Nearby pharmacy lookup failed", error);
+    return res.status(500).json({
+      message: "Unable to find nearby pharmacies right now.",
+    });
+  }
+}
+
+export async function getNearbyPharmaciesForActivePrescription(req, res) {
+  try {
+    const { lat, lng } = req.query;
+
+    const prescription = await Prescription.findOne({
+      patientId: req.user.id,
+      status: { $in: ["Pending Dispense", "Active"] },
+    })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "medications.medicineVariantId",
+        select: "dosage form medicineGroupId",
+        populate: {
+          path: "medicineGroupId",
+          select: "genericName category",
+        },
+      });
+
+    if (!prescription) {
+      return res.status(200).json({
+        prescription: null,
+        pharmacies: [],
+      });
+    }
+
+    const primaryMedication = prescription.medications[0];
+    const nearbyPharmacies = await findNearbyPharmaciesForVariant({
+      medicineVariantId: primaryMedication?.medicineVariantId?._id,
+      lat,
+      lng,
+      limit: 3,
+    });
+
+    return res.status(200).json({
+      prescription: {
+        id: prescription._id,
+        prescriptionId: prescription.prescriptionId,
+        medicineVariantId: primaryMedication?.medicineVariantId?._id || null,
+        medicineName:
+          primaryMedication?.medicineVariantId?.medicineGroupId?.genericName || "Medicine",
+        dosage: primaryMedication?.medicineVariantId?.dosage || null,
+        form: primaryMedication?.medicineVariantId?.form || null,
+      },
+      pharmacies: nearbyPharmacies.map((pharmacy) => ({
+        id: pharmacy._id,
+        name: pharmacy.name,
+        address: pharmacy.address,
+        contact: pharmacy.contact,
+        rating: pharmacy.rating,
+        imageUrl: pharmacy.imageUrl,
+        operatingHours: pharmacy.operatingHours,
+        location: pharmacy.location,
+        distanceKm: Number((pharmacy.distanceMeters / 1000).toFixed(2)),
+        inventory: pharmacy.inventory,
+      })),
+    });
+  } catch (error) {
+    console.error("Active prescription nearby lookup failed", error);
+    return res.status(500).json({
+      message: "Unable to load nearby pharmacies for your prescription.",
     });
   }
 }

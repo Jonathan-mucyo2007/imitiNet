@@ -337,6 +337,7 @@ export const submitClaim = async (req, res) => {
 
       const claim = await Claim.create({
         claimId: buildClaimId(),
+        patientId: summary.prescription.patientId._id,
         pharmacyId: req.user.id,
         prescriptionId,
         insuranceProviderId,

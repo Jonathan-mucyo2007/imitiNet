@@ -17,6 +17,11 @@ const pharmacySchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    operatingHours: {
+      type: String,
+      trim: true,
+      default: "Open daily, 07:00 - 22:00",
+    },
     rating: {
       type: Number,
       required: true,

@@ -7,7 +7,8 @@ import DashboardPage from "./pages/DashboardPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import FindMedicine from "./pages/patient/FindMedicine";
-import NewClaim from "./pages/pharmacy/NewClaim";
+import PatientDashboard from "./pages/patient/PatientDashboard";
+import PharmacyDispense from "./pages/pharmacy/PharmacyDispense";
 import DashboardPharmacy from "./pages/pharmacy/Dashboard";
 import InventoryPharmacy from "./pages/pharmacy/Inventory";
 import InsurerDashboard from "./pages/insurer/InsurerDashboard";
@@ -39,6 +40,22 @@ function App() {
         path="/dashboard/patient"
         element={
           <ProtectedRoute allowedRoles={["patient"]}>
+            <PatientDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/patient/find-medicine"
+        element={
+          <ProtectedRoute allowedRoles={["patient"]}>
+            <FindMedicine />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/find-medicine"
+        element={
+          <ProtectedRoute allowedRoles={["patient"]}>
             <FindMedicine />
           </ProtectedRoute>
         }
@@ -55,7 +72,7 @@ function App() {
         path="/dashboard/pharmacy/claims/new"
         element={
           <ProtectedRoute allowedRoles={["pharmacy"]}>
-            <NewClaim />
+            <PharmacyDispense />
           </ProtectedRoute>
         }
       />

@@ -19,37 +19,26 @@ describe("pharmacy portal routes", () => {
     );
   }
 
-  it("blocks patient tokens from the pharmacy patient list endpoint", async () => {
+  it("blocks patient tokens from the RX retrieval endpoint", async () => {
     const app = createApp();
 
     const response = await request(app)
-      .get("/api/patients")
+      .get("/api/pharmacy/prescription/retrieve/RX-782-KGL")
       .set("Authorization", `Bearer ${createToken("patient")}`);
 
     expect(response.status).toBe(403);
     expect(response.body.message).toBe("Forbidden");
   });
 
-  it("blocks patient tokens from the prescription gateway endpoint", async () => {
+  it("returns not found for an invalid RX code", async () => {
     const app = createApp();
 
     const response = await request(app)
-      .get("/api/prescriptions/patient/507f191e810c19729de860eb")
-      .set("Authorization", `Bearer ${createToken("patient")}`);
-
-    expect(response.status).toBe(403);
-    expect(response.body.message).toBe("Forbidden");
-  });
-
-  it("rejects invalid patient ids for the prescription gateway", async () => {
-    const app = createApp();
-
-    const response = await request(app)
-      .get("/api/prescriptions/patient/not-a-valid-id")
+      .get("/api/pharmacy/prescription/retrieve/NOT-A-REAL-RX")
       .set("Authorization", `Bearer ${createToken("pharmacy")}`);
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toBe("Invalid patient ID.");
+    expect(response.status).toBe(404);
+    expect(response.body.message).toBe("Invalid or expired RX code.");
   });
 
   it("rejects invalid ids when previewing a pharmacy claim", async () => {

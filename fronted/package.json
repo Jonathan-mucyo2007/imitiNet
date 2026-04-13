@@ -13,14 +13,17 @@
     "cypress:run:all": "cypress run"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.99.0",
     "axios": "^1.7.7",
     "framer-motion": "^11.11.17",
+    "html5-qrcode": "^2.3.8",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.511.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
     "react-parallax-tilt": "^1.7.286",
+    "react-qr-code": "^2.0.18",
     "react-router-dom": "^6.28.0",
     "recharts": "^3.8.1",
     "socket.io-client": "^4.8.3"

@@ -12,8 +12,8 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/AuthContext";
 
 const sidebarItems = [
-  { label: "My Dashboard", icon: LayoutGrid, to: "/dashboard/patient-overview", disabled: true },
-  { label: "Find Medicine", icon: Pill, to: "/dashboard/patient" },
+  { label: "My Dashboard", icon: LayoutGrid, to: "/dashboard/patient" },
+  { label: "Find Medicine", icon: Pill, to: "/dashboard/patient/find-medicine" },
   { label: "Check Insurance", icon: ShieldCheck, to: "/patient/check-insurance" },
   { label: "My Appointments", icon: CalendarDays, to: "/dashboard/patient-appointments", disabled: true },
 ];

@@ -3,7 +3,7 @@ import express from "express";
 import authRoutes from "./routes/authRoutes.js";
 import inventoryRoutes from "./routes/inventoryRoutes.js";
 import claimsRoutes from "./routes/claimsRoutes.js";
-import patientRoutes from "./routes/patientRoutes.js";
+import patientDashboardRoutes from "./routes/patientDashboardRoutes.js";
 import prescriptionRoutes from "./routes/prescriptionRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import pharmacyInventoryRoutes from "./routes/pharmacyInventoryRoutes.js";
@@ -28,8 +28,8 @@ export function createApp() {
   });
 
   app.use("/api/auth", authRoutes);
-  app.use("/api/patients", patientRoutes);
-  app.use("/api/prescriptions", prescriptionRoutes);
+  app.use("/api/patient", patientDashboardRoutes);
+  app.use("/api/pharmacy/prescription", prescriptionRoutes);
   app.use("/api/inventory", inventoryRoutes);
   app.use("/api/claims", claimsRoutes);
   app.use("/api/pharmacy/dashboard", dashboardRoutes);

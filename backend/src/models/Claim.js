@@ -19,6 +19,12 @@ const claimSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    patientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     pharmacyId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -97,6 +103,7 @@ const claimSchema = new mongoose.Schema(
 claimSchema.index({ pharmacyId: 1, submittedAt: -1 });
 claimSchema.index({ pharmacyId: 1, status: 1 });
 claimSchema.index({ insuranceProviderId: 1, submittedAt: -1, status: 1 });
+claimSchema.index({ patientId: 1, submittedAt: -1 });
 
 const Claim = mongoose.model("Claim", claimSchema);
 

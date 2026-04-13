@@ -150,7 +150,7 @@ const CheckInsurance = () => {
             <button type="submit" disabled={loading || !medicineVariantId} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50">
               {loading ? "Simulating..." : "Check Coverage"}
             </button>
-            <button type="button" onClick={() => navigate('/dashboard/patient')} className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-lg transition-colors">
+            <button type="button" onClick={() => navigate('/dashboard/patient/find-medicine')} className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-lg transition-colors">
               Back to Medicine Search
             </button>
           </div>

@@ -8,6 +8,7 @@ import InsuranceProvider from "../models/InsuranceProvider.js";
 import Prescription from "../models/Prescription.js";
 import Claim from "../models/Claim.js";
 import PatientVerification from "../models/PatientVerification.js";
+import PatientQrSession from "../models/PatientQrSession.js";
 import User from "../models/User.js";
 import NationalStatsMaterialized from "../models/NationalStatsMaterialized.js";
 
@@ -18,6 +19,7 @@ const pharmacies = [
     name: "Kigali Central Pharmacy",
     address: "KN 3 Rd, Nyarugenge, Kigali",
     contact: "+250 788 100 101",
+    operatingHours: "Mon-Sun, 06:30 - 22:00",
     rating: 4.8,
     location: { type: "Point", coordinates: [30.0619, -1.9441] },
   },
@@ -25,6 +27,7 @@ const pharmacies = [
     name: "Remera Care Pharmacy",
     address: "KG 11 Ave, Remera, Kigali",
     contact: "+250 788 100 102",
+    operatingHours: "Mon-Sun, 07:00 - 22:00",
     rating: 4.6,
     location: { type: "Point", coordinates: [30.1127, -1.9566] },
   },
@@ -32,6 +35,7 @@ const pharmacies = [
     name: "Kimironko Family Pharmacy",
     address: "KG 28 Ave, Kimironko, Kigali",
     contact: "+250 788 100 103",
+    operatingHours: "Mon-Sat, 07:00 - 21:30",
     rating: 4.5,
     location: { type: "Point", coordinates: [30.1264, -1.9497] },
   },
@@ -39,6 +43,7 @@ const pharmacies = [
     name: "Kacyiru Health Hub",
     address: "KG 7 Ave, Kacyiru, Kigali",
     contact: "+250 788 100 104",
+    operatingHours: "Mon-Sun, 06:00 - 23:00",
     rating: 4.7,
     location: { type: "Point", coordinates: [30.0891, -1.9352] },
   },
@@ -46,6 +51,7 @@ const pharmacies = [
     name: "Nyamirambo Community Pharmacy",
     address: "KN 2 St, Nyamirambo, Kigali",
     contact: "+250 788 100 105",
+    operatingHours: "Mon-Sun, 07:00 - 21:00",
     rating: 4.4,
     location: { type: "Point", coordinates: [30.0395, -1.9706] },
   },
@@ -53,6 +59,7 @@ const pharmacies = [
     name: "Kimironko District Pharmacy",
     address: "KG 17 Ave, Kibagabaga, Kigali",
     contact: "+250 788 100 106",
+    operatingHours: "Mon-Sat, 07:00 - 22:00",
     rating: 4.3,
     location: { type: "Point", coordinates: [30.1169, -1.9283] },
   },
@@ -60,6 +67,7 @@ const pharmacies = [
     name: "Gikondo Wellness Pharmacy",
     address: "KK 15 Rd, Gikondo, Kigali",
     contact: "+250 788 100 107",
+    operatingHours: "Mon-Sun, 06:30 - 21:30",
     rating: 4.2,
     location: { type: "Point", coordinates: [30.0708, -1.9872] },
   },
@@ -67,6 +75,7 @@ const pharmacies = [
     name: "Kanombe Essential Pharmacy",
     address: "KN 5 Rd, Kanombe, Kigali",
     contact: "+250 788 100 108",
+    operatingHours: "Mon-Sun, 07:00 - 22:30",
     rating: 4.6,
     location: { type: "Point", coordinates: [30.1517, -1.9722] },
   },
@@ -354,6 +363,7 @@ async function seedDatabase() {
       mongoose.connection.dropCollection("prescriptions").catch(() => null),
       mongoose.connection.dropCollection("claims").catch(() => null),
       mongoose.connection.dropCollection("patientverifications").catch(() => null),
+      mongoose.connection.dropCollection("patientqrsessions").catch(() => null),
       mongoose.connection.dropCollection("users").catch(() => null),
       mongoose.connection.dropCollection("pharmacies").catch(() => null),
       mongoose.connection.dropCollection("insuranceproviders").catch(() => null),
@@ -366,6 +376,7 @@ async function seedDatabase() {
       Prescription.deleteMany({}),
       Claim.deleteMany({}),
       PatientVerification.deleteMany({}),
+      PatientQrSession.deleteMany({}),
       User.deleteMany({}),
       Pharmacy.deleteMany({}),
       InsuranceProvider.deleteMany({}),
@@ -417,8 +428,6 @@ async function seedDatabase() {
       }))
     );
 
-    const kigaliAdmin = createdUsers.find(u => u.email === "pharmacy.admin@imitinet.rw");
-
     let batchCounter = 0;
 
     createdPharmacies.forEach((pharmacy, pharmacyIndex) => {
@@ -453,7 +462,7 @@ async function seedDatabase() {
           if (quantity <= 0) stockStatus = "Out of Stock";
 
           inventoryDocuments.push({
-            pharmacyId: isKigaliCentral ? kigaliAdmin._id : pharmacy._id,
+            pharmacyId: pharmacy._id,
             medicineVariantId: variant._id,
             batchNumber: `BATCH-${String(batchCounter).padStart(4, "0")}`,
             stockStatus,
@@ -585,6 +594,7 @@ async function seedDatabase() {
 
       claimDocuments.push({
         claimId: `CLM-${Math.floor(10000 + Math.random() * 90000)}`,
+        patientId: selectedPatient._id,
         pharmacyId: targetPharmacy._id,
         prescriptionId: insertedPrescriptions[Math.floor(Math.random() * insertedPrescriptions.length)]._id,
         insuranceProviderId: selectedInsurer._id,
