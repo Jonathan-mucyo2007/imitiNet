@@ -46,6 +46,12 @@ const claimSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    verificationToken: {
+      type: String,
+      trim: true,
+      index: true,
+      default: null,
+    },
     approvalTimeHours: {
       type: Number,
     },

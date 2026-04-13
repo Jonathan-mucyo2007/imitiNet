@@ -6,6 +6,7 @@ function generateToken(user) {
     {
       id: user._id,
       role: user.role,
+      facilityId: user.facilityId || null,
     },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
@@ -32,6 +33,7 @@ export async function register(req, res) {
       email,
       password,
       role,
+      name,
       nationalId,
       facilityId,
       insuranceStatus,
@@ -46,11 +48,14 @@ export async function register(req, res) {
 
     const user = await User.create({
       email,
-      fullName,
+      fullName: fullName || name,
       password,
       role,
       nationalId: role === "patient" ? nationalId : undefined,
-      facilityId: role === "pharmacy" || role === "insurer" ? facilityId : undefined,
+      facilityId:
+        role === "pharmacy" || role === "insurer" || role === "receptionist"
+          ? facilityId
+          : undefined,
       pharmacyProfileId: role === "pharmacy" ? pharmacyProfileId : undefined,
       insuranceStatus: role === "patient" ? insuranceStatus || "active" : undefined,
     });

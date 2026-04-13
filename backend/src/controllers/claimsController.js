@@ -5,6 +5,7 @@ import MedicineVariant from "../models/MedicineVariant.js";
 import MedicineGroup from "../models/MedicineGroup.js";
 import InsuranceProvider from "../models/InsuranceProvider.js";
 import Prescription from "../models/Prescription.js";
+import PatientVerification from "../models/PatientVerification.js";
 import User from "../models/User.js";
 import {
   calculateCoverageBreakdown,
@@ -287,7 +288,7 @@ export const previewPrescriptionClaim = async (req, res) => {
 
 export const submitClaim = async (req, res) => {
   try {
-    const { prescriptionId, insuranceProviderId } = req.body;
+    const { prescriptionId, insuranceProviderId, verificationToken } = req.body;
 
     const summary = await buildPrescriptionCoverageSummary({
       prescriptionId,
@@ -312,6 +313,20 @@ export const submitClaim = async (req, res) => {
       });
     }
 
+    if (verificationToken) {
+      const activeVerification = await PatientVerification.findOne({
+        _id: verificationToken,
+        isVerified: true,
+        expiresAt: { $gt: new Date() },
+      });
+
+      if (!activeVerification) {
+        return res.status(400).json({
+          message: "Verification token is invalid or has expired.",
+        });
+      }
+    }
+
     try {
       const medicineSnapshot = summary.prescription.medications.map((item) => ({
         name: item.medicineVariantId.medicineGroupId.genericName,
@@ -327,6 +342,7 @@ export const submitClaim = async (req, res) => {
         insuranceProviderId,
         patientName: summary.prescription.patientId.fullName,
         insurerName: summary.provider.name,
+        verificationToken: verificationToken || null,
         approvalTimeHours: 0,
         totalAmountRWF: summary.totals.totalAmountRWF,
         coveredAmountRWF: summary.totals.coveredAmountRWF,
@@ -379,6 +395,7 @@ export const submitClaim = async (req, res) => {
           id: claim._id,
           claimId: claim.claimId,
           status: claim.status,
+          verificationToken: claim.verificationToken,
           submittedAt: claim.submittedAt,
         },
         breakdown: summary.totals,

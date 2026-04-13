@@ -7,6 +7,7 @@ import Pharmacy from "../models/Pharmacy.js";
 import InsuranceProvider from "../models/InsuranceProvider.js";
 import Prescription from "../models/Prescription.js";
 import Claim from "../models/Claim.js";
+import PatientVerification from "../models/PatientVerification.js";
 import User from "../models/User.js";
 import NationalStatsMaterialized from "../models/NationalStatsMaterialized.js";
 
@@ -318,6 +319,13 @@ const users = [
     password: "minisante@2026",
     role: "regulator",
   },
+  {
+    fullName: "Kigali Reception Lead",
+    email: "reception@imitinet.rw",
+    password: "reception@2026",
+    role: "receptionist",
+    facilityId: "HOSP-KGL-001",
+  },
 ];
 
 function randomInt(min, max) {
@@ -345,6 +353,7 @@ async function seedDatabase() {
       mongoose.connection.dropCollection("medicinevariants").catch(() => null),
       mongoose.connection.dropCollection("prescriptions").catch(() => null),
       mongoose.connection.dropCollection("claims").catch(() => null),
+      mongoose.connection.dropCollection("patientverifications").catch(() => null),
       mongoose.connection.dropCollection("users").catch(() => null),
       mongoose.connection.dropCollection("pharmacies").catch(() => null),
       mongoose.connection.dropCollection("insuranceproviders").catch(() => null),
@@ -356,6 +365,7 @@ async function seedDatabase() {
       MedicineGroup.deleteMany({}),
       Prescription.deleteMany({}),
       Claim.deleteMany({}),
+      PatientVerification.deleteMany({}),
       User.deleteMany({}),
       Pharmacy.deleteMany({}),
       InsuranceProvider.deleteMany({}),

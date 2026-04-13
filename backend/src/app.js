@@ -9,6 +9,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import pharmacyInventoryRoutes from "./routes/pharmacyInventoryRoutes.js";
 import insurerRoutes from "./routes/insurerRoutes.js";
 import regulatorRoutes from "./routes/regulatorRoutes.js";
+import receptionistRoutes from "./routes/receptionistRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
 
 export function createApp() {
@@ -35,6 +36,7 @@ export function createApp() {
   app.use("/api/pharmacy/inventory", pharmacyInventoryRoutes);
   app.use("/api/insurer", insurerRoutes);
   app.use("/api/regulator", regulatorRoutes);
+  app.use("/api/receptionist", receptionistRoutes);
   app.use("/api/public", publicRoutes);
 
   app.use((err, _req, res, _next) => {

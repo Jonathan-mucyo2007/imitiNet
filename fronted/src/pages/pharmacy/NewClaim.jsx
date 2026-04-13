@@ -13,6 +13,7 @@ import {
   Stethoscope,
   UserRoundSearch,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import PharmacyLayout from "../../components/layout/PharmacyLayout";
 import api from "../../services/api";
 
@@ -149,6 +150,7 @@ function EmrCard({ title, accentClass, icon: Icon }) {
 }
 
 function NewClaim() {
+  const [searchParams] = useSearchParams();
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(true);
   const [selectedPatientId, setSelectedPatientId] = useState("");
@@ -161,6 +163,7 @@ function NewClaim() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const verificationToken = searchParams.get("verificationToken") || "";
 
   useEffect(() => {
     async function bootstrapData() {
@@ -258,6 +261,7 @@ function NewClaim() {
       const { data } = await api.post("/claims/submit", {
         prescriptionId: prescription.id,
         insuranceProviderId: selectedProviderId,
+        verificationToken: verificationToken || undefined,
       });
 
       setSuccessMessage(data.message);
@@ -292,6 +296,12 @@ function NewClaim() {
         {errorMessage ? (
           <div className="rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
             {errorMessage}
+          </div>
+        ) : null}
+
+        {verificationToken ? (
+          <div className="rounded-[1.75rem] border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-700">
+            Reception verification session attached: <span className="font-semibold">{verificationToken}</span>
           </div>
         ) : null}
 

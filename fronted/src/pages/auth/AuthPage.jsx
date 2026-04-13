@@ -35,6 +35,11 @@ const roleConfig = {
     loginLabel: "Regulator",
     registerLabel: "regulator",
   },
+  "Hospital Receptionist Portal": {
+    apiRole: "receptionist",
+    loginLabel: "Receptionist",
+    registerLabel: "receptionist",
+  },
 };
 
 const containerVariants = {
@@ -161,7 +166,8 @@ function AuthPage() {
   const apiRole = currentRole?.apiRole || "patient";
   const displayRole = currentRole?.loginLabel || "Patient";
   const isPatient = apiRole === "patient";
-  const needsFacility = apiRole === "pharmacy" || apiRole === "insurer";
+  const needsFacility =
+    apiRole === "pharmacy" || apiRole === "insurer" || apiRole === "receptionist";
 
   const loginTitle = useMemo(() => `Kwinjira nka ${displayRole}`, [displayRole]);
 
@@ -230,6 +236,7 @@ function AuthPage() {
 
     try {
       const payload = {
+        fullName: registerForm.name,
         email: registerForm.email,
         password: registerForm.password,
         role: apiRole,

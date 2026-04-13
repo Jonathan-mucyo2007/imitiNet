@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 
-const allowedRoles = ["patient", "pharmacy", "insurer", "regulator"];
+const allowedRoles = ["patient", "pharmacy", "insurer", "regulator", "receptionist"];
 const insuranceStatuses = ["active", "inactive"];
 
 const userSchema = new mongoose.Schema(
@@ -39,7 +39,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       required() {
-        return this.role === "pharmacy" || this.role === "insurer";
+        return (
+          this.role === "pharmacy" ||
+          this.role === "insurer" ||
+          this.role === "receptionist"
+        );
       },
     },
     pharmacyProfileId: {

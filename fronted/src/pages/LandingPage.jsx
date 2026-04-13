@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import {
   Bell,
+  ClipboardCheck,
   Building2,
   Gavel,
   Home,
@@ -15,6 +16,7 @@ import patientPortalImage from "../assets/patient portal.jfif";
 import pharmacyPortalImage from "../assets/pharmacy.jfif";
 import insurerPortalImage from "../assets/insurer portal.jfif";
 import regulatorPortalImage from "../assets/regulator.jfif";
+import receptionistPortalImage from "../assets/clinic1.jfif";
 import RoleCard from "../components/RoleCard";
 
 const navigationItems = [
@@ -55,6 +57,14 @@ const roleCards = [
       "Monitor national health metrics, ensure medicine traceability, and oversee policy implementation.",
     buttonLabel: "Access Regulator Dashboard",
     imageSrc: regulatorPortalImage,
+  },
+  {
+    title: "Hospital Receptionist Portal",
+    icon: ClipboardCheck,
+    description:
+      "Verify patient identity, confirm RSSB eligibility responses, and pass secure session tokens into the claims workflow.",
+    buttonLabel: "Access Receptionist Portal",
+    imageSrc: receptionistPortalImage,
   },
 ];
 

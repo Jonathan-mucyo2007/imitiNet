@@ -15,6 +15,10 @@ import InsurerLayout from "./components/layout/InsurerLayout";
 import AboutPage from "./pages/AboutPage";
 import ContactPage from "./pages/ContactPage";
 import RegulatorLayout from "./components/layout/RegulatorLayout";
+import ReceptionistLayout from "./components/layout/ReceptionistLayout";
+import ReceptionHome from "./pages/receptionist/ReceptionHome";
+import PatientVerification from "./pages/receptionist/PatientVerification";
+import HospitalDashboard from "./pages/receptionist/HospitalDashboard";
 
 function App() {
   return (
@@ -80,6 +84,36 @@ function App() {
             <RegulatorLayout>
               <DashboardPage role="regulator" />
             </RegulatorLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/receptionist"
+        element={
+          <ProtectedRoute allowedRoles={["receptionist"]}>
+            <ReceptionistLayout>
+              <ReceptionHome />
+            </ReceptionistLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/receptionist/verify"
+        element={
+          <ProtectedRoute allowedRoles={["receptionist"]}>
+            <ReceptionistLayout>
+              <PatientVerification />
+            </ReceptionistLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/receptionist/analytics"
+        element={
+          <ProtectedRoute allowedRoles={["receptionist"]}>
+            <ReceptionistLayout>
+              <HospitalDashboard />
+            </ReceptionistLayout>
           </ProtectedRoute>
         }
       />
