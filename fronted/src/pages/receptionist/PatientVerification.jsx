@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 
+const SCAN_COOLDOWN_MS = 1500;
+
 function buildValidationMessage(value) {
   if (!value.trim()) return "National ID is required.";
   if (!/^\d+$/.test(value)) return "National ID must contain numbers only.";
@@ -53,6 +55,36 @@ function playSuccessBeep() {
 
   oscillator.start();
   oscillator.stop(audioContext.currentTime + 0.2);
+}
+
+function releaseScannerTracks(scannerElementId) {
+  const scannerRoot = document.getElementById(scannerElementId);
+  const mediaElements = scannerRoot?.querySelectorAll("video");
+
+  mediaElements?.forEach((videoElement) => {
+    const stream = videoElement.srcObject;
+    if (stream && typeof stream.getTracks === "function") {
+      stream.getTracks().forEach((track) => track.stop());
+      videoElement.srcObject = null;
+    }
+  });
+}
+
+async function buildCameraStartCandidates() {
+  const candidates = [{ facingMode: "environment" }, { facingMode: "user" }];
+
+  try {
+    const cameras = await Html5Qrcode.getCameras();
+    cameras.forEach((camera) => {
+      if (camera?.id) {
+        candidates.push(camera.id);
+      }
+    });
+  } catch (_error) {
+    // Camera enumeration is optional. Browsers may block it until permission is granted.
+  }
+
+  return candidates;
 }
 
 function VerificationResults({ result, idLabelValue, onCopyToken }) {
@@ -204,6 +236,8 @@ function PatientVerification() {
   const [isScannerBusy, setIsScannerBusy] = useState(false);
   const [lastScannedToken, setLastScannedToken] = useState("");
   const scannerRef = useRef(null);
+  const scannerLockRef = useRef(false);
+  const scannerCooldownRef = useRef(null);
   const scannerElementId = "patient-verification-scanner";
 
   const manualMutation = useMutation({
@@ -249,7 +283,15 @@ function PatientVerification() {
   const isValid = useMemo(() => buildValidationMessage(idNumber) === "", [idNumber]);
 
   async function stopScanner() {
+    if (scannerCooldownRef.current) {
+      window.clearTimeout(scannerCooldownRef.current);
+      scannerCooldownRef.current = null;
+    }
+
+    scannerLockRef.current = false;
+
     if (!scannerRef.current) {
+      releaseScannerTracks(scannerElementId);
       return;
     }
 
@@ -265,6 +307,7 @@ function PatientVerification() {
       // Ignore clear errors when DOM is already gone.
     }
 
+    releaseScannerTracks(scannerElementId);
     scannerRef.current = null;
   }
 
@@ -281,35 +324,51 @@ function PatientVerification() {
       const scanner = new Html5Qrcode(scannerElementId);
       scannerRef.current = scanner;
 
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 240, height: 240 },
-          aspectRatio: 1.333334,
-        },
-        async (decodedText) => {
-          if (isScannerBusy || decodedText === lastScannedToken) {
-            return;
-          }
+      const cameraCandidates = await buildCameraStartCandidates();
+      let lastCameraError = null;
 
-          setLastScannedToken(decodedText);
-          setIsScannerBusy(true);
-          setScannerMessage("Secure code detected. Verifying now...");
+      for (const candidate of cameraCandidates) {
+        try {
+          await scanner.start(
+            candidate,
+            {
+              fps: 10,
+              qrbox: { width: 240, height: 240 },
+              aspectRatio: 1.333334,
+            },
+            async (decodedText) => {
+              if (scannerLockRef.current || isScannerBusy || decodedText === lastScannedToken) {
+                return;
+              }
 
-          try {
-            await scanner.pause(true);
-          } catch (_error) {
-            // Some browsers may not support pause cleanly.
-          }
+              scannerLockRef.current = true;
+              setLastScannedToken(decodedText);
+              setIsScannerBusy(true);
+              setScannerMessage("Secure code detected. Verifying now...");
 
-          scanMutation.mutate(decodedText);
-        },
-        () => {}
-      );
-    } catch (error) {
+              try {
+                await scanner.pause(true);
+              } catch (_error) {
+                // Some browsers may not support pause cleanly.
+              }
+
+              scanMutation.mutate(decodedText);
+            },
+            () => {}
+          );
+          lastCameraError = null;
+          break;
+        } catch (error) {
+          lastCameraError = error;
+        }
+      }
+
+      if (lastCameraError) {
+        throw lastCameraError;
+      }
+    } catch (_error) {
       setCameraError(
-        "Camera access was denied or unavailable. Please allow camera access or use Manual ID Entry."
+        "Camera access denied or unavailable. Try Restart Scanner or use Manual ID Entry."
       );
       setScannerMessage("");
       await stopScanner();
@@ -356,6 +415,7 @@ function PatientVerification() {
     setScannerMessage("");
     setCameraError("");
     setIsScannerBusy(false);
+    scannerLockRef.current = false;
     await stopScanner();
     await startScanner();
   };

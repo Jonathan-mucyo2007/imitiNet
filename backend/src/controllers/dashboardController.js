@@ -2,6 +2,9 @@ import mongoose from "mongoose";
 import Claim from "../models/Claim.js";
 import User from "../models/User.js";
 
+const REVIEWABLE_STATUSES = ["Pending", "Flagged_By_AI"];
+const RESOLVED_STATUSES = ["Approved", "Rejected"];
+
 // GET /api/pharmacy/dashboard/stats
 export const getDashboardStats = async (req, res) => {
   try {
@@ -27,7 +30,7 @@ export const getDashboardStats = async (req, res) => {
                 _id: null,
                 totalClaims: { $sum: 1 },
                 pendingClaims: {
-                  $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] },
+                  $sum: { $cond: [{ $in: ["$status", REVIEWABLE_STATUSES] }, 1, 0] },
                 },
                 approvedClaims: {
                   $sum: { $cond: [{ $eq: ["$status", "Approved"] }, 1, 0] },
@@ -49,7 +52,7 @@ export const getDashboardStats = async (req, res) => {
           ],
           // Avg. Approval Time
           avgApprovalTime: [
-            { $match: { status: { $ne: "Pending" } } },
+            { $match: { status: { $in: RESOLVED_STATUSES } } },
             {
               $group: {
                 _id: null,
@@ -109,7 +112,9 @@ export const getRecentClaims = async (req, res) => {
     const claims = await Claim.find({ pharmacyId: req.user.id })
       .sort({ submittedAt: -1 })
       .limit(10)
-      .select("claimId patientName insurerName status totalAmountRWF submittedAt");
+      .select(
+        "claimId patientName insurerName status totalAmountRWF submittedAt aiFraudCheck rejectionReason coveredAmountRWF patientPaysRWF"
+      );
 
     return res.status(200).json(claims);
   } catch (error) {
@@ -139,7 +144,7 @@ export const getProcessingTrends = async (req, res) => {
           totalClaims: { $sum: 1 },
           averageApproval: {
             $avg: {
-              $cond: [{ $ne: ["$status", "Pending"] }, "$approvalTimeHours", 0],
+              $cond: [{ $in: ["$status", RESOLVED_STATUSES] }, "$approvalTimeHours", 0],
             },
           },
         },
@@ -157,53 +162,5 @@ export const getProcessingTrends = async (req, res) => {
   } catch (error) {
     console.error("Trends aggregation failed", error);
     return res.status(500).json({ message: "Failed to load processing trends." });
-  }
-};
-
-// PATCH /api/pharmacy/dashboard/claims/:id/status
-export const updateClaimStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-
-    if (!["Approved", "Rejected"].includes(status)) {
-      return res.status(400).json({ message: "Status must be 'Approved' or 'Rejected'." });
-    }
-
-    const claim = await Claim.findOne({
-      _id: req.params.id,
-      pharmacyId: req.user.id, // Multi-tenant: only own claims
-    });
-
-    if (!claim) {
-      return res.status(404).json({ message: "Claim not found or access denied." });
-    }
-
-    if (claim.status !== "Pending") {
-      return res.status(400).json({ message: `Claim has already been ${claim.status.toLowerCase()}.` });
-    }
-
-    // Calculate real approval time in hours from submission to now
-    const now = new Date();
-    const submittedAt = new Date(claim.submittedAt);
-    const approvalTimeHours = Math.max(1, Math.round((now - submittedAt) / (1000 * 60 * 60)));
-
-    claim.status = status;
-    claim.approvalTimeHours = approvalTimeHours;
-    await claim.save();
-
-    console.log(`--- CLAIM STATUS UPDATE --- ${claim.claimId}: ${status} (${approvalTimeHours}h)`);
-
-    return res.status(200).json({
-      message: `Claim ${claim.claimId} has been ${status.toLowerCase()}.`,
-      claim: {
-        _id: claim._id,
-        claimId: claim.claimId,
-        status: claim.status,
-        approvalTimeHours: claim.approvalTimeHours,
-      },
-    });
-  } catch (error) {
-    console.error("Claim status update failed", error);
-    return res.status(500).json({ message: "Failed to update claim status." });
   }
 };

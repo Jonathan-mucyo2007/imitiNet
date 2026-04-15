@@ -15,7 +15,7 @@ const sidebarItems = [
   { label: "My Dashboard", icon: LayoutGrid, to: "/dashboard/patient" },
   { label: "Find Medicine", icon: Pill, to: "/dashboard/patient/find-medicine" },
   { label: "Check Insurance", icon: ShieldCheck, to: "/patient/check-insurance" },
-  { label: "My Appointments", icon: CalendarDays, to: "/dashboard/patient-appointments", disabled: true },
+  
 ];
 
 function PatientLayout({ children }) {

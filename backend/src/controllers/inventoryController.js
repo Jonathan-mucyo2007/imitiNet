@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Inventory from "../models/Inventory.js";
 import Prescription from "../models/Prescription.js";
-import Pharmacy from "../models/Pharmacy.js";
+import PharmacyProfile from "../models/PharmacyProfile.js";
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -100,6 +100,7 @@ async function buildSearchResults({ query, category, lat, lng }) {
       { "medicineGroup.description": searchRegex },
       { "variant.dosage": searchRegex },
       { "variant.form": searchRegex },
+      { "pharmacy.facilityName": searchRegex },
       { "pharmacy.name": searchRegex },
     ];
   }
@@ -129,9 +130,9 @@ async function buildSearchResults({ query, category, lat, lng }) {
         },
         pharmacy: {
           id: "$pharmacy._id",
-          name: "$pharmacy.name",
+          name: { $ifNull: ["$pharmacy.facilityName", "$pharmacy.name"] },
           address: "$pharmacy.address",
-          contact: "$pharmacy.contact",
+          contact: { $ifNull: ["$pharmacy.contactPhone", "$pharmacy.contact"] },
           rating: "$pharmacy.rating",
           imageUrl: "$pharmacy.imageUrl",
           location: "$pharmacy.location",
@@ -199,7 +200,7 @@ async function findNearbyPharmaciesForVariant({
     return [];
   }
 
-  return Pharmacy.aggregate([
+  return PharmacyProfile.aggregate([
     {
       $geoNear: {
         near: {
@@ -272,15 +273,21 @@ export async function searchInventory(req, res) {
 
     const [results, featuredPharmacies] = await Promise.all([
       buildSearchResults({ query: query.trim(), category, lat, lng }),
-      Pharmacy.find({})
+      PharmacyProfile.find({})
         .sort({ rating: -1, createdAt: -1 })
         .limit(6)
-        .select("name address contact rating imageUrl location operatingHours"),
+        .select(
+          "facilityName name address contactPhone contact rating imageUrl location operatingHours"
+        ),
     ]);
 
     return res.status(200).json({
       results,
-      featuredPharmacies,
+      featuredPharmacies: featuredPharmacies.map((pharmacy) => ({
+        ...pharmacy.toObject(),
+        name: pharmacy.facilityName || pharmacy.name,
+        contact: pharmacy.contactPhone || pharmacy.contact,
+      })),
     });
   } catch (error) {
     console.error("Inventory search failed", error);
@@ -304,9 +311,9 @@ export async function getNearbyPharmaciesForMedicine(req, res) {
     return res.status(200).json({
       pharmacies: nearbyPharmacies.map((pharmacy) => ({
         id: pharmacy._id,
-        name: pharmacy.name,
+        name: pharmacy.facilityName || pharmacy.name,
         address: pharmacy.address,
-        contact: pharmacy.contact,
+        contact: pharmacy.contactPhone || pharmacy.contact,
         rating: pharmacy.rating,
         imageUrl: pharmacy.imageUrl,
         operatingHours: pharmacy.operatingHours,
@@ -368,9 +375,9 @@ export async function getNearbyPharmaciesForActivePrescription(req, res) {
       },
       pharmacies: nearbyPharmacies.map((pharmacy) => ({
         id: pharmacy._id,
-        name: pharmacy.name,
+        name: pharmacy.facilityName || pharmacy.name,
         address: pharmacy.address,
-        contact: pharmacy.contact,
+        contact: pharmacy.contactPhone || pharmacy.contact,
         rating: pharmacy.rating,
         imageUrl: pharmacy.imageUrl,
         operatingHours: pharmacy.operatingHours,

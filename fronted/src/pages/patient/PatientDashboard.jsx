@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "react-qr-code";
+import { io } from "socket.io-client";
 import {
   CalendarDays,
   CheckCircle2,
   Copy,
   CreditCard,
+  History,
   Lock,
   MapPin,
   Navigation,
@@ -26,6 +28,13 @@ function formatDate(value) {
     day: "numeric",
     month: "short",
     year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatDateTime(value) {
+  return new Intl.DateTimeFormat("en-RW", {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(value));
 }
 
@@ -168,18 +177,19 @@ function PatientQrCard({ qrTokenQuery }) {
       </div>
       <div className="flex justify-center rounded-2xl bg-slate-100 p-3">
         {qrTokenQuery.isLoading ? (
-          <div className="flex h-[164px] w-[164px] animate-pulse items-center justify-center rounded-2xl bg-slate-200" />
+          <div className="flex h-[212px] w-[212px] animate-pulse items-center justify-center rounded-2xl bg-slate-200" />
         ) : qrTokenQuery.data?.token ? (
           <div className="rounded-2xl bg-white p-3">
             <QRCode
               value={qrTokenQuery.data.token}
-              size={140}
+              size={188}
+              level="L"
               bgColor="#FFFFFF"
               fgColor="#0f172a"
             />
           </div>
         ) : (
-          <div className="flex h-[164px] w-[164px] items-center justify-center rounded-2xl bg-white px-5 text-center text-xs font-medium text-slate-500">
+          <div className="flex h-[212px] w-[212px] items-center justify-center rounded-2xl bg-white px-5 text-center text-xs font-medium text-slate-500">
             Secure hospital QR unavailable
           </div>
         )}
@@ -329,7 +339,166 @@ function NearbyPrescriptionPharmacies({
   );
 }
 
-function PrescriptionWallet({ prescriptions, nearbyQuery, locationError, onViewOnMap }) {
+function FulfillmentSuccessState({ fulfilledNotice, onDismiss }) {
+  return (
+    <motion.div
+      key="fulfilled-success"
+      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -18, scale: 0.98 }}
+      transition={{ duration: 0.35 }}
+      className="rounded-[24px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-6 shadow-sm"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="rounded-3xl bg-emerald-600 p-3 text-white shadow-[0_14px_28px_rgba(5,150,105,0.2)]">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
+              Dispense Complete
+            </p>
+            <h3 className="mt-2 font-display text-2xl font-semibold text-slate-900">
+              Deal Done. Medicine Dispensed Successfully.
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              RX {fulfilledNotice.rxCode || "secured"} was fulfilled at{" "}
+              <span className="font-semibold text-slate-900">
+                {formatDateTime(fulfilledNotice.fulfilledAt)}
+              </span>
+              .
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Your active wallet is now closed and this prescription has moved into history.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+        >
+          Dismiss
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+function ActivePrescriptionCard({
+  activePrescription,
+  copiedCode,
+  copyCode,
+  nearbyQuery,
+  locationError,
+  onViewOnMap,
+}) {
+  const displayRxCode =
+    activePrescription?.rxCode ||
+    activePrescription?.prescriptionId ||
+    activePrescription?.retrievalCode ||
+    "";
+  const prescriptionQrQuery = useQuery({
+    queryKey: ["patient-prescription-qr-token", activePrescription?.id],
+    queryFn: async () => {
+      const response = await api.get(`/patient/prescriptions/${activePrescription.id}/qr-token`);
+      return response.data;
+    },
+    enabled: Boolean(activePrescription?.id),
+    staleTime: 4 * 60 * 1000,
+    refetchInterval: 240000,
+    refetchOnWindowFocus: true,
+  });
+
+  return (
+    <motion.div
+      key={`active-wallet-${activePrescription.id}`}
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -24, scale: 0.98 }}
+      transition={{ duration: 0.35 }}
+      className="rounded-[24px] bg-gradient-to-br from-blue-50 via-emerald-50 to-white p-5 ring-1 ring-blue-100"
+    >
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700">
+            Retrieval Code
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <p className="font-display text-3xl font-bold tracking-[0.18em] text-slate-900">
+              {displayRxCode}
+            </p>
+            <button
+              type="button"
+              onClick={() => copyCode(displayRxCode)}
+              className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
+            >
+              <Copy className="h-4 w-4" />
+              {copiedCode === displayRxCode ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="mt-4 text-sm text-slate-600">
+            {activePrescription.medications.map((medication) => medication.medicineName).join(", ")}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Issued by {activePrescription.prescribingDoctor} via {activePrescription.originatingEmr}
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)] lg:grid-cols-1">
+          <div className="rounded-2xl bg-white/90 p-4 shadow-sm ring-1 ring-white">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status</p>
+            <p className="mt-2 text-base font-semibold text-slate-900">{activePrescription.status}</p>
+            <p className="mt-1 text-sm text-slate-500">{formatDate(activePrescription.issuedAt)}</p>
+          </div>
+
+          <div className="rounded-2xl bg-white/90 p-4 text-center shadow-sm ring-1 ring-white">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Pharmacy QR
+            </p>
+            <div className="mt-3 flex justify-center rounded-2xl bg-slate-100 p-3">
+              {prescriptionQrQuery.isLoading ? (
+                <div className="flex h-[164px] w-[164px] animate-pulse items-center justify-center rounded-2xl bg-slate-200" />
+              ) : prescriptionQrQuery.data?.token ? (
+                <div className="rounded-2xl bg-white p-3">
+                  <QRCode
+                    value={prescriptionQrQuery.data.token}
+                    size={140}
+                    bgColor="#FFFFFF"
+                    fgColor="#0f172a"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-[164px] w-[164px] items-center justify-center rounded-2xl bg-white px-5 text-center text-xs font-medium text-slate-500">
+                  {prescriptionQrQuery.error?.response?.data?.message || "Secure pharmacy QR unavailable"}
+                </div>
+              )}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Present this QR for pharmacy scan. It refreshes automatically every few minutes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <NearbyPrescriptionPharmacies
+        activePrescription={activePrescription}
+        nearbyQuery={nearbyQuery}
+        locationError={locationError}
+        onViewOnMap={onViewOnMap}
+      />
+    </motion.div>
+  );
+}
+
+function PrescriptionWallet({
+  prescriptions,
+  fulfilledNotice,
+  nearbyQuery,
+  locationError,
+  onDismissFulfilledNotice,
+  onViewOnMap,
+}) {
   const [copiedCode, setCopiedCode] = useState("");
   const activePrescription = prescriptions[0];
 
@@ -343,44 +512,12 @@ function PrescriptionWallet({ prescriptions, nearbyQuery, locationError, onViewO
     }
   };
 
-  if (!activePrescription) {
-    return (
-      <motion.section
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, delay: 0.08 }}
-        className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
-      >
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-slate-100 p-3 text-slate-500">
-            <CalendarDays className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-slate-900">
-              Active Prescription Wallet
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">Nothing is waiting for collection right now.</p>
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-14 text-center">
-          <p className="text-lg font-semibold text-slate-900">
-            You have no pending prescriptions. Stay healthy!
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            When a clinician issues a new prescription, your retrieval code will appear here.
-          </p>
-        </div>
-      </motion.section>
-    );
-  }
-
   return (
     <motion.section
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: 0.08 }}
-      className="rounded-[28px] border border-blue-100 bg-white p-6 shadow-sm"
+      className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
     >
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -391,51 +528,53 @@ function PrescriptionWallet({ prescriptions, nearbyQuery, locationError, onViewO
             Present this retrieval code at a participating pharmacy.
           </p>
         </div>
-        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-          Ready
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
+            activePrescription ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {activePrescription ? "Ready" : "Idle"}
         </span>
       </div>
 
-      <div className="mt-6 rounded-[24px] bg-gradient-to-br from-blue-50 via-emerald-50 to-white p-5 ring-1 ring-blue-100">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700">
-              Retrieval Code
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <p className="font-display text-3xl font-bold tracking-[0.18em] text-slate-900">
-                {activePrescription.retrievalCode}
+      <div className="mt-6">
+        <AnimatePresence mode="wait">
+          {fulfilledNotice ? (
+            <FulfillmentSuccessState
+              fulfilledNotice={fulfilledNotice}
+              onDismiss={onDismissFulfilledNotice}
+            />
+          ) : null}
+
+          {!fulfilledNotice && activePrescription ? (
+            <ActivePrescriptionCard
+              activePrescription={activePrescription}
+              copiedCode={copiedCode}
+              copyCode={copyCode}
+              nearbyQuery={nearbyQuery}
+              locationError={locationError}
+              onViewOnMap={onViewOnMap}
+            />
+          ) : null}
+
+          {!fulfilledNotice && !activePrescription ? (
+            <motion.div
+              key="empty-wallet"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -18 }}
+              transition={{ duration: 0.3 }}
+              className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-14 text-center"
+            >
+              <p className="text-lg font-semibold text-slate-900">
+                No active prescriptions. Waiting for new doctor&apos;s orders.
               </p>
-              <button
-                type="button"
-                onClick={() => copyCode(activePrescription.retrievalCode)}
-                className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
-              >
-                <Copy className="h-4 w-4" />
-                {copiedCode === activePrescription.retrievalCode ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <p className="mt-4 text-sm text-slate-600">
-              {activePrescription.medications.map((medication) => medication.medicineName).join(", ")}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Issued by {activePrescription.prescribingDoctor} via {activePrescription.originatingEmr}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white/90 p-4 shadow-sm ring-1 ring-white">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status</p>
-            <p className="mt-2 text-base font-semibold text-slate-900">{activePrescription.status}</p>
-            <p className="mt-1 text-sm text-slate-500">{formatDate(activePrescription.issuedAt)}</p>
-          </div>
-        </div>
-
-        <NearbyPrescriptionPharmacies
-          activePrescription={activePrescription}
-          nearbyQuery={nearbyQuery}
-          locationError={locationError}
-          onViewOnMap={onViewOnMap}
-        />
+              <p className="mt-2 text-sm text-slate-500">
+                When a clinician issues a new prescription, your retrieval code will appear here.
+              </p>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
     </motion.section>
   );
@@ -506,6 +645,75 @@ function VisitTimeline({ claims }) {
   );
 }
 
+function PrescriptionHistory({ items }) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.1 }}
+      className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
+    >
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
+          <History className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="font-display text-2xl font-semibold text-slate-900">
+            Prescription History
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Dispensed prescriptions move here after pharmacy fulfillment.
+          </p>
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
+          <p className="text-base font-semibold text-slate-900">No dispensed prescriptions yet.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            Completed prescriptions will appear here once medicine is collected.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-6 space-y-4">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 shadow-sm"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                    {item.status}
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold text-slate-900">{item.prescriptionId}</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Dispensed {formatDateTime(item.fulfilledAt)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
+                  {item.prescribingDoctor} via {item.originatingEmr}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {item.medications.map((medication, index) => (
+                  <span
+                    key={`${item.id}-${medication.medicineName}-${index}`}
+                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
+                  >
+                    {medication.medicineName} x{medication.quantity}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.section>
+  );
+}
+
 function SecurityFooter() {
   return (
     <footer className="mt-6 rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
@@ -523,8 +731,10 @@ function SecurityFooter() {
 
 function PatientDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState("");
+  const [fulfilledNotice, setFulfilledNotice] = useState(null);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -568,7 +778,52 @@ function PatientDashboard() {
     refetchOnWindowFocus: true,
   });
 
+  const profileId = dashboardQuery.data?.profile?.id;
   const activePrescription = dashboardQuery.data?.activePrescriptions?.[0] || null;
+  const prescriptionHistory = dashboardQuery.data?.prescriptionHistory || [];
+
+  useEffect(() => {
+    if (!profileId) {
+      return undefined;
+    }
+
+    const socket = io("http://localhost:5000", { withCredentials: true });
+
+    const handlePrescriptionFulfilled = (payload) => {
+      if (String(payload?.patientId) !== String(profileId)) {
+        return;
+      }
+
+      setFulfilledNotice({
+        prescriptionId: payload.prescriptionId,
+        rxCode: payload.rxCode,
+        fulfilledAt: payload.fulfilledAt || new Date().toISOString(),
+      });
+
+      queryClient.removeQueries({ queryKey: ["patient-prescription-qr-token"] });
+      queryClient.invalidateQueries({ queryKey: ["patient-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["patient-dashboard-nearby"] });
+    };
+
+    socket.on("prescription_fulfilled", handlePrescriptionFulfilled);
+
+    return () => {
+      socket.off("prescription_fulfilled", handlePrescriptionFulfilled);
+      socket.disconnect();
+    };
+  }, [profileId, queryClient]);
+
+  useEffect(() => {
+    if (!fulfilledNotice) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setFulfilledNotice(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fulfilledNotice]);
 
   const nearbyQuery = useQuery({
     queryKey: ["patient-dashboard-nearby", userLocation?.lat, userLocation?.lng],
@@ -621,13 +876,16 @@ function PatientDashboard() {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
             <PrescriptionWallet
               prescriptions={dashboardQuery.data.activePrescriptions}
+              fulfilledNotice={fulfilledNotice}
               nearbyQuery={nearbyQuery}
               locationError={locationError}
+              onDismissFulfilledNotice={() => setFulfilledNotice(null)}
               onViewOnMap={handleViewOnMap}
             />
             <VisitTimeline claims={dashboardQuery.data.recentClaims} />
           </div>
 
+          <PrescriptionHistory items={prescriptionHistory} />
           <SecurityFooter />
         </div>
       ) : null}

@@ -50,6 +50,23 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Pharmacy",
     },
+    insuranceProviderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InsuranceProvider",
+      required() {
+        return this.role === "insurer";
+      },
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+      },
+      coordinates: {
+        type: [Number],
+        default: undefined,
+      },
+    },
     insuranceStatus: {
       type: String,
       enum: insuranceStatuses,

@@ -15,7 +15,7 @@ const sidebarItems = [
   { label: "Claim Dashboard", icon: ReceiptText, to: "/dashboard/pharmacy" },
   { label: "New Claim Submission", icon: FileCheck2, to: "/dashboard/pharmacy/claims/new" },
   { label: "Inventory Management", icon: Boxes, to: "/dashboard/pharmacy/inventory" },
-  { label: "Pharmacy Settings", icon: Settings2, to: "/dashboard/pharmacy/settings", disabled: true },
+  { label: "Pharmacy Settings", icon: Settings2, to: "/dashboard/pharmacy/settings" },
 ];
 
 function PharmacyLayout({ title, subtitle, children }) {

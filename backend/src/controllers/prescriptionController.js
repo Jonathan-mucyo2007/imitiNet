@@ -1,18 +1,70 @@
 import Prescription from "../models/Prescription.js";
 import User from "../models/User.js";
 import Inventory from "../models/Inventory.js";
+import { verifyPharmacyQrToken } from "../utils/pharmacyQrToken.js";
+
+const ACTIVE_PRESCRIPTION_STATUS = "Active";
+
+function looksLikeJwtCredential(value) {
+  const normalizedValue = String(value || "").trim();
+  const parts = normalizedValue.split(".");
+  return parts.length === 3 && normalizedValue.length > 40;
+}
+
+function isRawRxCredential(value) {
+  return /^RX-[A-Z0-9-]+$/i.test(String(value || "").trim());
+}
+
+function resolveRetrievalCredential(credential) {
+  const normalizedValue = String(credential || "").trim();
+  const normalizedUpperValue = normalizedValue.toUpperCase();
+
+  if (!normalizedValue) {
+    return {
+      error: { status: 400, message: "Retrieval credential is required." },
+    };
+  }
+
+  if (looksLikeJwtCredential(normalizedValue)) {
+    try {
+      const decoded = verifyPharmacyQrToken(normalizedValue);
+      return {
+        lookup: {
+          _id: decoded.prescriptionId,
+          prescriptionId: String(decoded.rxCode || "").trim().toUpperCase(),
+          status: ACTIVE_PRESCRIPTION_STATUS,
+        },
+      };
+    } catch (_error) {
+      return {
+        error: { status: 403, message: "Token expired or invalid." },
+      };
+    }
+  }
+
+  if (isRawRxCredential(normalizedValue)) {
+    return {
+      lookup: {
+        prescriptionId: normalizedUpperValue,
+        status: ACTIVE_PRESCRIPTION_STATUS,
+      },
+    };
+  }
+
+  return {
+    error: { status: 400, message: "Invalid retrieval credential format." },
+  };
+}
 
 export async function getPrescriptionByRetrieveCode(req, res) {
   try {
-    const rxCode = String(req.params.rxCode || "").trim().toUpperCase();
+    const { lookup, error: credentialError } = resolveRetrievalCredential(req.params.rxCode);
 
-    if (!rxCode || !/^RX-[A-Z0-9-]+$/.test(rxCode)) {
-      return res.status(404).json({ message: "Invalid or expired RX code." });
+    if (credentialError) {
+      return res.status(credentialError.status).json({ message: credentialError.message });
     }
 
-    const prescription = await Prescription.findOne({
-      prescriptionId: rxCode,
-    })
+    const prescription = await Prescription.findOne(lookup)
       .populate("patientId", "fullName insuranceStatus")
       .populate({
         path: "medications.medicineVariantId",
@@ -24,13 +76,17 @@ export async function getPrescriptionByRetrieveCode(req, res) {
       });
 
     if (!prescription) {
-      return res.status(404).json({ message: "Invalid or expired RX code." });
-    }
+      const relaxedLookup = { ...lookup };
+      delete relaxedLookup.status;
+      const matchedInactivePrescription = await Prescription.findOne(relaxedLookup).select("status");
 
-    if (prescription.status !== "Active") {
-      return res.status(403).json({
-        message: "This RX code is no longer available for dispensing.",
-      });
+      if (matchedInactivePrescription) {
+        return res.status(403).json({
+          message: "This RX code is no longer available for dispensing.",
+        });
+      }
+
+      return res.status(404).json({ message: "Prescription not found. Please verify the code." });
     }
 
     const pharmacyUser = await User.findById(req.user.id).select("pharmacyProfileId");

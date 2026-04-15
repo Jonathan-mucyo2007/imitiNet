@@ -7,6 +7,7 @@ import patientDashboardRoutes from "./routes/patientDashboardRoutes.js";
 import prescriptionRoutes from "./routes/prescriptionRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import pharmacyInventoryRoutes from "./routes/pharmacyInventoryRoutes.js";
+import pharmacySettingsRoutes from "./routes/pharmacySettingsRoutes.js";
 import insurerRoutes from "./routes/insurerRoutes.js";
 import regulatorRoutes from "./routes/regulatorRoutes.js";
 import receptionistRoutes from "./routes/receptionistRoutes.js";
@@ -34,6 +35,7 @@ export function createApp() {
   app.use("/api/claims", claimsRoutes);
   app.use("/api/pharmacy/dashboard", dashboardRoutes);
   app.use("/api/pharmacy/inventory", pharmacyInventoryRoutes);
+  app.use("/api/pharmacy/settings", pharmacySettingsRoutes);
   app.use("/api/insurer", insurerRoutes);
   app.use("/api/regulator", regulatorRoutes);
   app.use("/api/receptionist", receptionistRoutes);

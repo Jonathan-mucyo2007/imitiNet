@@ -52,6 +52,8 @@ const InsurerLayout = ({ children }) => {
     navigate("/login/insurer");
   };
 
+  const insurerDisplayName = user?.insuranceProvider?.name || "Insurer";
+
   const portalLinks = [
     { name: "Claims Overview", path: "/dashboard/insurer/claims", icon: FileText },
     { name: "Pharmacy Network", path: "/dashboard/insurer/network", icon: Network },
@@ -118,7 +120,7 @@ const InsurerLayout = ({ children }) => {
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-4">
-             <h1 className="text-xl font-bold font-display text-slate-800">Insurer Dashboard</h1>
+             <h1 className="text-xl font-bold font-display text-slate-800">{insurerDisplayName} Dashboard</h1>
              {!socketConnected && (
                <div className="flex items-center gap-1.5 shrink-0 px-2 py-1 bg-amber-50 rounded-md border border-amber-200">
                  <WifiOff className="h-3.5 w-3.5 text-amber-500 animate-pulse" />

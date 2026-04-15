@@ -7,6 +7,7 @@ function generateToken(user) {
       id: user._id,
       role: user.role,
       facilityId: user.facilityId || null,
+      insuranceProviderId: user.insuranceProviderId?._id || user.insuranceProviderId || null,
     },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
@@ -22,6 +23,15 @@ function sanitizeUser(user) {
     nationalId: user.nationalId || null,
     facilityId: user.facilityId || null,
     pharmacyProfileId: user.pharmacyProfileId || null,
+    insuranceProviderId: user.insuranceProviderId?._id || user.insuranceProviderId || null,
+    insuranceProvider: user.insuranceProviderId
+      ? {
+          id: user.insuranceProviderId._id || user.insuranceProviderId,
+          name: user.insuranceProviderId.name || null,
+          umbrellaCode: user.insuranceProviderId.umbrellaCode || null,
+          isUmbrellaProvider: Boolean(user.insuranceProviderId.isUmbrellaProvider),
+        }
+      : null,
     insuranceStatus: user.insuranceStatus || null,
     createdAt: user.createdAt,
   };
@@ -39,6 +49,7 @@ export async function register(req, res) {
       insuranceStatus,
       fullName,
       pharmacyProfileId,
+      insuranceProviderId,
     } = req.body;
 
     const existingUser = await User.findOne({ email: email?.toLowerCase() });
@@ -57,6 +68,7 @@ export async function register(req, res) {
           ? facilityId
           : undefined,
       pharmacyProfileId: role === "pharmacy" ? pharmacyProfileId : undefined,
+      insuranceProviderId: role === "insurer" ? insuranceProviderId : undefined,
       insuranceStatus: role === "patient" ? insuranceStatus || "active" : undefined,
     });
 
@@ -80,7 +92,10 @@ export async function login(req, res) {
   try {
     const { email, password, role } = req.body;
 
-    const user = await User.findOne({ email: email?.toLowerCase() });
+    const user = await User.findOne({ email: email?.toLowerCase() }).populate(
+      "insuranceProviderId",
+      "name umbrellaCode isUmbrellaProvider"
+    );
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -108,7 +123,9 @@ export async function login(req, res) {
 
 export async function getMe(req, res) {
   try {
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(req.user.id)
+      .select("-password")
+      .populate("insuranceProviderId", "name umbrellaCode isUmbrellaProvider");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }

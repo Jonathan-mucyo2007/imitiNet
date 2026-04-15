@@ -83,8 +83,28 @@ const claimSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: ["Pending", "Flagged_By_AI", "Approved", "Rejected", "Cancelled"],
       default: "Pending",
+    },
+    aiFraudCheck: {
+      isAnomalous: {
+        type: Boolean,
+        default: false,
+      },
+      anomalyScore: {
+        type: Number,
+        default: 0,
+      },
+      reasonCode: {
+        type: String,
+        trim: true,
+        default: null,
+      },
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: null,
     },
     medicineSnapshot: {
       type: [medicineSnapshotSchema],

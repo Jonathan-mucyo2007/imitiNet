@@ -15,14 +15,33 @@ import { useSearchParams } from "react-router-dom";
 import PharmacyLayout from "../../components/layout/PharmacyLayout";
 import api from "../../services/api";
 
+const SCAN_COOLDOWN_MS = 1500;
+
 function formatCurrency(value) {
   return `RWF ${Number(value || 0).toLocaleString()}`;
 }
 
+function isJwtLike(value) {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value.trim());
+}
+
+function releaseScannerTracks(scannerElementId) {
+  const scannerRoot = document.getElementById(scannerElementId);
+  const mediaElements = scannerRoot?.querySelectorAll("video");
+
+  mediaElements?.forEach((videoElement) => {
+    const stream = videoElement.srcObject;
+    if (stream && typeof stream.getTracks === "function") {
+      stream.getTracks().forEach((track) => track.stop());
+      videoElement.srcObject = null;
+    }
+  });
+}
+
 function buildRxCodeMessage(value) {
   if (!value.trim()) return "RX Retrieval Code is required.";
-  if (!/^RX-[A-Z0-9-]+$/i.test(value.trim())) {
-    return "Enter a valid RX Retrieval Code, for example RX-782-KGL.";
+  if (!/^RX-[A-Z0-9-]+$/i.test(value.trim()) && !isJwtLike(value)) {
+    return "Enter a valid RX Retrieval Code or scan a signed pharmacy QR token.";
   }
   return "";
 }
@@ -86,6 +105,8 @@ function PharmacyDispense() {
   const [cameraError, setCameraError] = useState("");
   const [isScannerBusy, setIsScannerBusy] = useState(false);
   const scannerRef = useRef(null);
+  const scannerLockRef = useRef(false);
+  const scannerCooldownRef = useRef(null);
   const scannerElementId = "pharmacy-dispense-scanner";
   const verificationToken = searchParams.get("verificationToken") || "";
 
@@ -108,6 +129,13 @@ function PharmacyDispense() {
   }, []);
 
   async function stopScanner() {
+    if (scannerCooldownRef.current) {
+      window.clearTimeout(scannerCooldownRef.current);
+      scannerCooldownRef.current = null;
+    }
+
+    scannerLockRef.current = false;
+
     if (!scannerRef.current) return;
 
     try {
@@ -118,11 +146,13 @@ function PharmacyDispense() {
       await scannerRef.current.clear();
     } catch (_error) {}
 
+    releaseScannerTracks(scannerElementId);
     scannerRef.current = null;
   }
 
   async function fetchPrescriptionByCode(nextCode) {
-    const normalizedCode = String(nextCode || "").trim().toUpperCase();
+    const rawValue = String(nextCode || "").trim();
+    const normalizedCode = isJwtLike(rawValue) ? rawValue : rawValue.toUpperCase();
     const nextError = buildRxCodeMessage(normalizedCode);
     setValidationError(nextError);
     setErrorMessage("");
@@ -139,13 +169,22 @@ function PharmacyDispense() {
       const { data } = await api.get(
         `/pharmacy/prescription/retrieve/${encodeURIComponent(normalizedCode)}`
       );
-      setRxCode(normalizedCode);
+      setRxCode(isJwtLike(normalizedCode) ? "" : normalizedCode);
       setPrescription(data.prescription);
-    } catch (_error) {
+    } catch (error) {
       setPrescription(null);
-      setErrorMessage(
-        "Invalid or Expired RX Code. Please ensure the patient provided the correct retrieval code."
-      );
+      const responseMessage = error?.response?.data?.message;
+
+      if (responseMessage === "Token expired or invalid.") {
+        setErrorMessage("The patient's QR code has expired. Please refresh the code.");
+      } else if (responseMessage === "Prescription not found. Please verify the code.") {
+        setErrorMessage("Prescription not found. Please verify the code.");
+      } else {
+        setErrorMessage(
+          responseMessage ||
+            "Invalid retrieval credential. Ask the patient for a fresh pharmacy QR or the correct RX code."
+        );
+      }
     } finally {
       setPrescriptionLoading(false);
     }
@@ -155,7 +194,7 @@ function PharmacyDispense() {
     if (scannerRef.current) return;
 
     setCameraError("");
-    setScannerMessage("Align the patient QR or RX code inside the frame.");
+    setScannerMessage("Align the patient's pharmacy QR or RX code inside the frame.");
 
     try {
       const scanner = new Html5Qrcode(scannerElementId);
@@ -165,10 +204,11 @@ function PharmacyDispense() {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.333334 },
         async (decodedText) => {
-          if (isScannerBusy) return;
+          if (scannerLockRef.current || isScannerBusy) return;
 
+          scannerLockRef.current = true;
           setIsScannerBusy(true);
-          setScannerMessage("RX code detected. Loading prescription...");
+          setScannerMessage("Credential detected. Loading prescription...");
           playSuccessBeep();
 
           try {
@@ -179,14 +219,20 @@ function PharmacyDispense() {
           await stopScanner();
           setIsScannerOpen(false);
           setIsScannerBusy(false);
+
+          scannerCooldownRef.current = window.setTimeout(() => {
+            scannerLockRef.current = false;
+            scannerCooldownRef.current = null;
+          }, SCAN_COOLDOWN_MS);
         },
         () => {}
       );
-    } catch (_error) {
+    } catch (error) {
       setCameraError(
-        "Camera access was denied or unavailable. Please use the RX Retrieval Code input instead."
+        "Camera access denied or unavailable. Please use the manual RX code entry."
       );
       setScannerMessage("");
+      setIsScannerBusy(false);
       await stopScanner();
     }
   }
@@ -258,7 +304,7 @@ function PharmacyDispense() {
   return (
     <PharmacyLayout
       title="Zero-Trust Dispensing"
-      subtitle="Pharmacists can only access a prescription when the patient explicitly provides a valid RX retrieval code or scannable consent token."
+      subtitle="Pharmacists can only access a prescription when the patient explicitly provides a valid RX retrieval code or a short-lived signed pharmacy QR."
     >
       <div className="space-y-6">
         {successMessage ? (
@@ -285,10 +331,10 @@ function PharmacyDispense() {
               Consent-Based Retrieval
             </div>
             <h2 className="mt-5 font-display text-4xl font-semibold tracking-tight text-slate-950">
-              Retrieve a prescription using only the patient&apos;s RX code or QR.
+              Retrieve a prescription using only the patient&apos;s RX code or signed QR.
             </h2>
             <p className="mt-3 text-base leading-7 text-slate-600">
-              Name, email, and National ID lookup have been removed from the pharmacy workflow.
+              Search With Claim Code On Patient Dashboard
             </p>
 
             <form
@@ -302,7 +348,8 @@ function PharmacyDispense() {
                 <input
                   value={rxCode}
                   onChange={(event) => {
-                    const nextValue = event.target.value.toUpperCase();
+                    const rawValue = event.target.value;
+                    const nextValue = isJwtLike(rawValue) ? rawValue : rawValue.toUpperCase();
                     setRxCode(nextValue);
                     setValidationError(buildRxCodeMessage(nextValue));
                   }}
@@ -324,7 +371,7 @@ function PharmacyDispense() {
                     className="inline-flex h-14 items-center justify-center gap-2 rounded-[1.2rem] border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50"
                   >
                     <ScanLine className="h-4 w-4 text-blue-600" />
-                    Scan QR Token
+                    Scan Pharmacy QR
                   </motion.button>
                 </div>
               </div>
@@ -346,7 +393,7 @@ function PharmacyDispense() {
                     Prescription Retrieval Result
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Patient identity is only revealed after successful RX code validation.
+                    Patient identity is only revealed after successful credential validation.
                   </p>
                 </div>
               </div>
@@ -430,7 +477,7 @@ function PharmacyDispense() {
                 </div>
               ) : (
                 <div className="mt-6 rounded-3xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-                  Enter or scan a valid RX Retrieval Code to load a single dispensing transaction.
+                  Enter an RX Retrieval Code or scan a signed pharmacy QR to load a single dispensing transaction.
                 </div>
               )}
             </div>
@@ -580,12 +627,13 @@ function PharmacyDispense() {
                 className="fixed inset-0 z-40 bg-slate-950/65 backdrop-blur-sm"
                 onClick={() => setIsScannerOpen(false)}
               />
-              <motion.div
-                initial={{ opacity: 0, y: 30, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 20, scale: 0.98 }}
-                className="fixed inset-x-4 top-1/2 z-50 mx-auto max-w-2xl -translate-y-1/2 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.3)]"
-              >
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ opacity: 0, y: 30, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.98 }}
+                  className="w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.3)]"
+                >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600">RX QR Scanner</p>
@@ -609,9 +657,9 @@ function PharmacyDispense() {
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_32%,rgba(2,6,23,0.4)_70%,rgba(2,6,23,0.84)_100%)]" />
                       <div className="absolute left-1/2 top-1/2 h-60 w-60 -translate-x-1/2 -translate-y-1/2 rounded-[2rem] border border-emerald-300/70 shadow-[0_0_0_9999px_rgba(2,6,23,0.15)]" />
                       <motion.div
-                        animate={{ y: [0, 216, 0] }}
-                        transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }}
-                        className="absolute left-1/2 top-[calc(50%-120px)] h-1 w-56 -translate-x-1/2 rounded-full bg-emerald-300 shadow-[0_0_24px_rgba(110,231,183,0.9)]"
+                        animate={{ opacity: [0.75, 1, 0.75] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute left-1/2 top-1/2 h-1 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-300 shadow-[0_0_24px_rgba(110,231,183,0.9)]"
                       />
                     </div>
 
@@ -642,7 +690,7 @@ function PharmacyDispense() {
                       <div className="rounded-2xl bg-white p-4">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Scanner Status</p>
                         <p className="mt-2 text-sm font-medium text-slate-900">
-                          {scannerMessage || "Waiting for RX code alignment."}
+                          {scannerMessage || "Waiting for signed QR or RX code alignment."}
                         </p>
                       </div>
 
@@ -652,21 +700,36 @@ function PharmacyDispense() {
                         </div>
                       ) : null}
 
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await stopScanner();
-                          await startScanner();
-                        }}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                      >
-                        <RefreshCcw className="h-4 w-4" />
-                        Restart Scanner
-                      </button>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            scannerLockRef.current = false;
+                            setCameraError("");
+                            await stopScanner();
+                            await startScanner();
+                          }}
+                          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                        >
+                          <RefreshCcw className="h-4 w-4" />
+                          Restart Scanner
+                        </button>
+
+                        {cameraError ? (
+                          <button
+                            type="button"
+                            onClick={() => setIsScannerOpen(false)}
+                            className="inline-flex items-center justify-center rounded-2xl bg-[#1E56D0] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1848ad]"
+                          >
+                            Use Manual RX Entry
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </motion.div>
+                </motion.div>
+              </div>
             </>
           ) : null}
         </AnimatePresence>

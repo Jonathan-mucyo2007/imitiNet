@@ -7,6 +7,20 @@ const insuranceProviderSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    umbrellaCode: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    isUmbrellaProvider: {
+      type: Boolean,
+      default: false,
+    },
+    parentProviderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InsuranceProvider",
+      default: null,
+    },
     coveragePercentage: {
       type: Number,
       required: true,

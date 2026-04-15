@@ -1,200 +1,211 @@
 import mongoose from "mongoose";
-import Inventory from "../models/Inventory.js";
-import MedicineVariant from "../models/MedicineVariant.js";
+import InventoryItem from "../models/InventoryItem.js";
 import MedicineGroup from "../models/MedicineGroup.js";
+import MedicineVariant from "../models/MedicineVariant.js";
+import User from "../models/User.js";
 import traceabilityGateway from "../services/traceabilityGatewaySync.js";
+import {
+  buildInventoryMedicineName,
+  buildNationalMedicineId,
+} from "../utils/nationalMedicineCatalog.js";
 
 const LOW_STOCK_THRESHOLD = 20;
+const EXPIRY_ALERT_WINDOW_DAYS = 90;
 
-// GET /api/pharmacy/inventory/command-center
-export const getCommandCenter = async (req, res) => {
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildStatusMatch(stockLevel) {
+  const now = new Date();
+
+  if (stockLevel === "Expired") {
+    return { expiryDate: { $lt: now } };
+  }
+
+  if (stockLevel === "Low_Stock") {
+    return {
+      expiryDate: { $gte: now },
+      quantity: { $lt: LOW_STOCK_THRESHOLD },
+    };
+  }
+
+  if (stockLevel === "Active") {
+    return {
+      expiryDate: { $gte: now },
+      quantity: { $gte: LOW_STOCK_THRESHOLD },
+    };
+  }
+
+  return {};
+}
+
+async function resolvePharmacyProfileId(userId) {
+  const user = await User.findById(userId).select("role pharmacyProfileId");
+
+  if (!user || user.role !== "pharmacy" || !user.pharmacyProfileId) {
+    return { error: { status: 403, message: "Only pharmacies can access inventory." } };
+  }
+
+  return { pharmacyProfileId: user.pharmacyProfileId };
+}
+
+async function buildCatalogEntries(search = "") {
+  const regex = search ? new RegExp(escapeRegex(search), "i") : null;
+  const groupMatch = regex
+    ? {
+        $or: [
+          { genericName: regex },
+          { category: regex },
+          { description: regex },
+        ],
+      }
+    : {};
+
+  const groups = await MedicineGroup.find(groupMatch)
+    .sort({ genericName: 1 })
+    .limit(12)
+    .lean();
+
+  if (!groups.length) {
+    return [];
+  }
+
+  const variants = await MedicineVariant.find({
+    medicineGroupId: { $in: groups.map((group) => group._id) },
+  })
+    .sort({ dosage: 1, form: 1 })
+    .lean();
+
+  const groupById = new Map(groups.map((group) => [String(group._id), group]));
+
+  return variants.map((variant) => {
+    const group = groupById.get(String(variant.medicineGroupId));
+    const medicineName = group?.genericName || variant.sku;
+    return {
+      id: variant._id,
+      nationalMedicineId: buildNationalMedicineId({
+        genericName: medicineName,
+        sku: variant.sku,
+      }),
+      medicineVariantId: variant._id,
+      medicineName,
+      category: group?.category || "General",
+      sku: variant.sku,
+      dosage: variant.dosage,
+      form: variant.form,
+      basePrice: variant.basePrice,
+      displayName: buildInventoryMedicineName({
+        genericName: medicineName,
+        dosage: variant.dosage,
+        form: variant.form,
+      }),
+    };
+  });
+}
+
+export async function getInventoryKpis(req, res) {
   try {
-    const pharmacyId = new mongoose.Types.ObjectId(req.user.id);
-    const sixMonthsFromNow = new Date();
-    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+    const resolved = await resolvePharmacyProfileId(req.user.id);
 
-    const aggregation = await Inventory.aggregate([
+    if (resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
+    }
+
+    const pharmacyId = new mongoose.Types.ObjectId(resolved.pharmacyProfileId);
+    const ninetyDaysFromNow = new Date();
+    ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + EXPIRY_ALERT_WINDOW_DAYS);
+
+    const [result] = await InventoryItem.aggregate([
       { $match: { pharmacyId } },
       {
-        $facet: {
-          kpis: [
-            {
-              $group: {
-                _id: null,
-                totalSKUs: { $addToSet: "$medicineVariantId" },
-                totalStockValue: { $sum: { $multiply: ["$priceRWF", "$quantity"] } },
-                lowStockCount: {
-                  $sum: { $cond: [{ $lt: ["$quantity", LOW_STOCK_THRESHOLD] }, 1, 0] },
+        $group: {
+          _id: null,
+          skuSet: { $addToSet: "$sku" },
+          totalStockValue: { $sum: { $multiply: ["$quantity", "$priceRWF"] } },
+          lowStockAlerts: {
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $lt: ["$quantity", LOW_STOCK_THRESHOLD] },
+                    {
+                      $and: [
+                        { $gte: ["$expiryDate", new Date()] },
+                        { $lte: ["$expiryDate", ninetyDaysFromNow] },
+                      ],
+                    },
+                  ],
                 },
-                expiringSoonCount: {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          { $lt: ["$expiryDate", sixMonthsFromNow] },
-                          { $gt: ["$quantity", 0] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-              },
+                1,
+                0,
+              ],
             },
-            {
-              $project: {
-                _id: 0,
-                totalSKUs: { $size: "$totalSKUs" },
-                totalStockValue: 1,
-                lowStockCount: 1,
-                expiringSoonCount: 1,
-              },
-            },
-          ],
-          lowStockAlerts: [
-            { $match: { quantity: { $lt: LOW_STOCK_THRESHOLD, $gt: 0 } } },
-            { $sort: { quantity: 1 } },
-            { $limit: 3 },
-            {
-              $lookup: {
-                from: "medicinevariants",
-                localField: "medicineVariantId",
-                foreignField: "_id",
-                as: "variant",
-              },
-            },
-            { $unwind: "$variant" },
-            {
-              $lookup: {
-                from: "medicinegroups",
-                localField: "variant.medicineGroupId",
-                foreignField: "_id",
-                as: "group",
-              },
-            },
-            { $unwind: "$group" },
-            {
-              $project: {
-                _id: 1,
-                quantity: 1,
-                medicineName: {
-                  $concat: ["$group.genericName", " ", "$variant.dosage"],
-                },
-                sku: "$variant.sku",
-                location: 1,
-              },
-            },
-          ],
-          expiringAlerts: [
-            {
-              $match: {
-                expiryDate: { $lt: sixMonthsFromNow },
-                quantity: { $gt: 0 },
-              },
-            },
-            { $sort: { expiryDate: 1 } },
-            { $limit: 3 },
-            {
-              $lookup: {
-                from: "medicinevariants",
-                localField: "medicineVariantId",
-                foreignField: "_id",
-                as: "variant",
-              },
-            },
-            { $unwind: "$variant" },
-            {
-              $lookup: {
-                from: "medicinegroups",
-                localField: "variant.medicineGroupId",
-                foreignField: "_id",
-                as: "group",
-              },
-            },
-            { $unwind: "$group" },
-            {
-              $project: {
-                _id: 1,
-                expiryDate: 1,
-                quantity: 1,
-                medicineName: {
-                  $concat: ["$group.genericName", " ", "$variant.dosage"],
-                },
-                sku: "$variant.sku",
-              },
-            },
-          ],
-          recentActivity: [
-            { $sort: { updatedAt: -1 } },
-            { $limit: 5 },
-            {
-              $lookup: {
-                from: "medicinevariants",
-                localField: "medicineVariantId",
-                foreignField: "_id",
-                as: "variant",
-              },
-            },
-            { $unwind: "$variant" },
-            {
-              $lookup: {
-                from: "medicinegroups",
-                localField: "variant.medicineGroupId",
-                foreignField: "_id",
-                as: "group",
-              },
-            },
-            { $unwind: "$group" },
-            {
-              $project: {
-                _id: 1,
-                updatedAt: 1,
-                batchNumber: 1,
-                quantity: 1,
-                medicineName: {
-                  $concat: ["$group.genericName", " ", "$variant.dosage"],
-                },
-                sku: "$variant.sku",
-              },
-            },
-          ],
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalSKUs: { $size: "$skuSet" },
+          totalStockValue: 1,
+          lowStockAlerts: 1,
         },
       },
     ]);
 
-    const result = aggregation[0];
-    const kpis = result.kpis[0] || {
-      totalSKUs: 0,
-      totalStockValue: 0,
-      lowStockCount: 0,
-      expiringSoonCount: 0,
-    };
-
-    const syncStatus = traceabilityGateway.getStatus();
-
-    return res.status(200).json({
-      kpis,
-      lowStockAlerts: result.lowStockAlerts,
-      expiringAlerts: result.expiringAlerts,
-      recentActivity: result.recentActivity,
-      syncStatus,
-    });
+    return res.status(200).json(
+      result || {
+        totalSKUs: 0,
+        totalStockValue: 0,
+        lowStockAlerts: 0,
+      }
+    );
   } catch (error) {
-    console.error("Inventory command center aggregation failed", error);
-    return res.status(500).json({ message: "Failed to load inventory command center." });
+    console.error("Inventory KPI aggregation failed", error);
+    return res.status(500).json({ message: "Unable to load inventory KPIs right now." });
   }
-};
+}
 
-// GET /api/pharmacy/inventory/full-list
-export const getFullList = async (req, res) => {
+export async function getInventoryList(req, res) {
   try {
-    const pharmacyId = new mongoose.Types.ObjectId(req.user.id);
-    const { search = "", category = "", status = "", page = 1, limit = 8 } = req.query;
+    const resolved = await resolvePharmacyProfileId(req.user.id);
+
+    if (resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
+    }
+
+    const pharmacyId = new mongoose.Types.ObjectId(resolved.pharmacyProfileId);
+    const {
+      search = "",
+      category = "All",
+      stockLevel = "All",
+      page = 1,
+      limit = 10,
+    } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const pipeline = [
-      { $match: { pharmacyId } },
+    const pipeline = [{ $match: { pharmacyId } }];
+    const searchRegex = search ? new RegExp(escapeRegex(search), "i") : null;
+
+    if (searchRegex) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { medicineName: searchRegex },
+            { sku: searchRegex },
+            { batchNumber: searchRegex },
+            { nationalMedicineId: searchRegex },
+          ],
+        },
+      });
+    }
+
+    if (stockLevel && stockLevel !== "All") {
+      pipeline.push({ $match: buildStatusMatch(stockLevel) });
+    }
+
+    pipeline.push(
       {
         $lookup: {
           from: "medicinevariants",
@@ -203,7 +214,6 @@ export const getFullList = async (req, res) => {
           as: "variant",
         },
       },
-      { $unwind: "$variant" },
       {
         $lookup: {
           from: "medicinegroups",
@@ -212,222 +222,268 @@ export const getFullList = async (req, res) => {
           as: "group",
         },
       },
-      { $unwind: "$group" },
-    ];
-
-    // Dynamic filters
-    const filterMatch = {};
-    if (search) {
-      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      filterMatch.$or = [
-        { "group.genericName": regex },
-        { "variant.sku": regex },
-        { "variant.dosage": regex },
-      ];
-    }
-    if (category && category !== "All") {
-      filterMatch["group.category"] = category;
-    }
-    if (status && status !== "All") {
-      if (status === "Expired") {
-        filterMatch.expiryDate = { $lt: new Date() };
-      } else {
-        filterMatch.stockStatus = status;
+      {
+        $addFields: {
+          variant: { $arrayElemAt: ["$variant", 0] },
+          group: { $arrayElemAt: ["$group", 0] },
+        },
       }
-    }
-    if (Object.keys(filterMatch).length > 0) {
-      pipeline.push({ $match: filterMatch });
+    );
+
+    if (category && category !== "All") {
+      pipeline.push({
+        $match: {
+          $or: [{ "group.category": category }, { category }],
+        },
+      });
     }
 
-    // Count total before pagination
     const countPipeline = [...pipeline, { $count: "total" }];
-    const countResult = await Inventory.aggregate(countPipeline);
+    const countResult = await InventoryItem.aggregate(countPipeline);
     const totalCount = countResult[0]?.total || 0;
 
-    // Project, sort, paginate
-    pipeline.push(
+    const items = await InventoryItem.aggregate([
+      ...pipeline,
+      {
+        $addFields: {
+          computedStatus: {
+            $switch: {
+              branches: [
+                {
+                  case: { $lt: ["$expiryDate", new Date()] },
+                  then: "Expired",
+                },
+                {
+                  case: { $lt: ["$quantity", LOW_STOCK_THRESHOLD] },
+                  then: "Low_Stock",
+                },
+              ],
+              default: "Active",
+            },
+          },
+          resolvedCategory: { $ifNull: ["$category", "$group.category"] },
+        },
+      },
       {
         $project: {
           _id: 1,
-          medicineName: {
-            $concat: ["$group.genericName", " ", "$variant.dosage"],
+          nationalMedicineId: {
+            $ifNull: [
+              "$nationalMedicineId",
+              {
+                $concat: [
+                  "RW-LOCAL-",
+                  {
+                    $toUpper: {
+                      $replaceAll: {
+                        input: { $ifNull: ["$sku", "UNKNOWN"] },
+                        find: " ",
+                        replacement: "-",
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
           },
-          sku: "$variant.sku",
+          medicineName: {
+            $ifNull: [
+              "$medicineName",
+              {
+                $trim: {
+                  input: {
+                    $concat: [
+                      { $ifNull: ["$group.genericName", { $ifNull: ["$variant.sku", "Unknown Medicine"] }] },
+                      " ",
+                      { $ifNull: ["$variant.dosage", ""] },
+                      " ",
+                      { $ifNull: ["$variant.form", ""] },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+          sku: 1,
+          batchNumber: 1,
           quantity: 1,
-          priceRWF: 1,
+          unitPrice: "$priceRWF",
           expiryDate: 1,
           location: 1,
+          category: "$resolvedCategory",
+          status: "$computedStatus",
           stockStatus: 1,
-          batchNumber: 1,
-          category: "$group.category",
+          medicineVariantId: 1,
         },
       },
-      { $sort: { medicineName: 1 } },
+      { $sort: { medicineName: 1, expiryDate: 1 } },
       { $skip: skip },
-      { $limit: Number(limit) }
-    );
-
-    const items = await Inventory.aggregate(pipeline);
+      { $limit: Number(limit) },
+    ]);
 
     return res.status(200).json({
       items,
-      totalCount,
       page: Number(page),
-      totalPages: Math.ceil(totalCount / Number(limit)),
+      limit: Number(limit),
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / Number(limit))),
     });
   } catch (error) {
-    console.error("Inventory full list failed", error);
-    return res.status(500).json({ message: "Failed to load inventory list." });
+    console.error("Inventory list failed", error);
+    return res.status(500).json({ message: "Unable to load pharmacy inventory right now." });
   }
-};
+}
 
-// POST /api/pharmacy/inventory/add-stock
-export const addStock = async (req, res) => {
+export async function searchNationalCatalog(req, res) {
   try {
-    const { medicineVariantId, batchNumber, quantity, priceRWF, expiryDate, location } = req.body;
+    const entries = await buildCatalogEntries(String(req.query.search || "").trim());
+    return res.status(200).json({ items: entries });
+  } catch (error) {
+    console.error("National catalog lookup failed", error);
+    return res.status(500).json({ message: "Unable to search the national medicine catalog." });
+  }
+}
 
-    if (!medicineVariantId || !batchNumber || !quantity || !priceRWF || !expiryDate) {
-      return res.status(400).json({ message: "All fields are required." });
+export async function addInventoryStock(req, res) {
+  try {
+    const resolved = await resolvePharmacyProfileId(req.user.id);
+
+    if (resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
     }
 
-    const variant = await MedicineVariant.findById(medicineVariantId);
-    if (!variant) {
-      return res.status(404).json({ message: "Medicine variant not found." });
-    }
-
-    const stockStatus = quantity < LOW_STOCK_THRESHOLD ? "Low Stock" : "In Stock";
-
-    const newLot = await Inventory.create({
-      pharmacyId: req.user.id,
+    const {
+      nationalMedicineId,
       medicineVariantId,
+      medicineName,
+      sku,
       batchNumber,
       quantity,
-      priceRWF,
+      unitPrice,
+      expiryDate,
+      location,
+    } = req.body;
+
+    if (
+      !nationalMedicineId ||
+      !medicineName ||
+      !sku ||
+      !batchNumber ||
+      quantity === undefined ||
+      unitPrice === undefined ||
+      !expiryDate ||
+      !location
+    ) {
+      return res.status(400).json({ message: "All inventory fields are required." });
+    }
+
+    const parsedQuantity = Number(quantity);
+    const parsedUnitPrice = Number(unitPrice);
+
+    if (
+      Number.isNaN(parsedQuantity) ||
+      parsedQuantity < 0 ||
+      Number.isNaN(parsedUnitPrice) ||
+      parsedUnitPrice < 0
+    ) {
+      return res.status(400).json({ message: "Quantity and unit price must be valid positive numbers." });
+    }
+
+    const variant = medicineVariantId ? await MedicineVariant.findById(medicineVariantId) : null;
+    const normalizedMedicineName = String(medicineName || "").trim();
+    const normalizedNationalMedicineId = String(nationalMedicineId || "").trim();
+
+    const item = await InventoryItem.create({
+      pharmacyId: resolved.pharmacyProfileId,
+      nationalMedicineId:
+        normalizedNationalMedicineId ||
+        buildNationalMedicineId({
+          genericName: normalizedMedicineName,
+          sku,
+        }),
+      medicineVariantId: variant?._id || null,
+      medicineName:
+        normalizedMedicineName ||
+        buildInventoryMedicineName({
+          genericName: variant?.sku || "Unknown Medicine",
+          dosage: "",
+          form: "",
+        }),
+      sku: String(sku).trim(),
+      batchNumber: String(batchNumber).trim(),
+      quantity: parsedQuantity,
+      unitPrice: parsedUnitPrice,
+      priceRWF: parsedUnitPrice,
       expiryDate: new Date(expiryDate),
-      location: location || "Shelf A1",
-      stockStatus,
+      location: String(location).trim(),
+      category: req.body.category || undefined,
     });
 
-    // Non-blocking FDA traceability sync
     traceabilityGateway.emit("inventory_mutated", {
-      pharmacyId: req.user.id,
-      variantId: medicineVariantId,
+      pharmacyId: String(resolved.pharmacyProfileId),
+      variantId: variant?._id ? String(variant._id) : String(nationalMedicineId),
       changeType: "RESTOCKED",
-      quantityDelta: quantity,
-      batchNumber,
+      quantityDelta: parsedQuantity,
+      batchNumber: item.batchNumber,
     });
 
     return res.status(201).json({
       message: "Stock added successfully.",
-      lot: newLot,
+      item,
     });
   } catch (error) {
-    console.error("Add stock failed", error);
-    return res.status(500).json({ message: "Failed to add stock." });
-  }
-};
+    console.error("Add inventory stock failed", error);
 
-// GET /api/pharmacy/inventory/sync-status
-export const getSyncStatus = async (req, res) => {
-  try {
-    const status = traceabilityGateway.getStatus();
-    return res.status(200).json(status);
-  } catch (error) {
-    return res.status(500).json({ message: "Failed to get sync status." });
-  }
-};
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: "This batch SKU already exists in your inventory." });
+    }
 
-// POST /api/pharmacy/inventory/trigger-sync
-export const triggerManualSync = async (req, res) => {
+    return res.status(500).json({ message: "Unable to add stock right now." });
+  }
+}
+
+export async function triggerInventorySync(req, res) {
   try {
+    const resolved = await resolvePharmacyProfileId(req.user.id);
+
+    if (resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
+    }
+
+    const invalidItems = await InventoryItem.find({
+      pharmacyId: resolved.pharmacyProfileId,
+      $or: [
+        { nationalMedicineId: { $exists: false } },
+        { nationalMedicineId: null },
+        { nationalMedicineId: "" },
+      ],
+    })
+      .select("_id medicineName sku batchNumber")
+      .lean();
+
+    if (invalidItems.length > 0) {
+      return res.status(400).json({
+        message: "Some inventory items are missing a valid national medicine ID.",
+        invalidItems,
+      });
+    }
+
+    const syncedAt = new Date().toISOString();
+
     traceabilityGateway.emit("inventory_mutated", {
-      pharmacyId: req.user.id,
+      pharmacyId: String(resolved.pharmacyProfileId),
       variantId: "MANUAL_SYNC",
       changeType: "MANUAL_SYNC",
       quantityDelta: 0,
       batchNumber: null,
     });
-    return res.status(200).json({
-      message: "Manual sync triggered.",
-      lastSyncedAt: new Date(),
-    });
-  } catch (error) {
-    return res.status(500).json({ message: "Sync trigger failed." });
-  }
-};
-
-// PUT /api/pharmacy/inventory/:id
-export const updateInventoryLot = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { quantity, priceRWF, expiryDate, location } = req.body;
-
-    // Strict validation
-    if (quantity !== undefined && quantity < 0) {
-      return res.status(400).json({ message: "Quantity cannot be negative." });
-    }
-    if (priceRWF !== undefined && priceRWF < 0) {
-      return res.status(400).json({ message: "Price cannot be negative." });
-    }
-    if (expiryDate) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (new Date(expiryDate) < today) {
-        return res.status(400).json({ message: "Expiry date cannot be in the past." });
-      }
-    }
-
-    // Ownership Verification & Old State retrieval
-    const inventoryLot = await Inventory.findOne({
-      _id: id,
-      pharmacyId: req.user.id
-    });
-
-    if (!inventoryLot) {
-      return res.status(404).json({ message: "Inventory lot not found or unauthorized." });
-    }
-
-    const oldState = {
-      quantity: inventoryLot.quantity,
-      priceRWF: inventoryLot.priceRWF,
-      expiryDate: inventoryLot.expiryDate,
-      location: inventoryLot.location,
-    };
-
-    if (quantity !== undefined) inventoryLot.quantity = quantity;
-    if (priceRWF !== undefined) inventoryLot.priceRWF = priceRWF;
-    if (expiryDate) inventoryLot.expiryDate = new Date(expiryDate);
-    if (location) inventoryLot.location = location;
-
-    // Status sync
-    inventoryLot.stockStatus = 
-      inventoryLot.quantity < LOW_STOCK_THRESHOLD 
-        ? (inventoryLot.quantity === 0 ? "Out of Stock" : "Low Stock") 
-        : "In Stock";
-
-    const updatedLot = await inventoryLot.save();
-
-    // Traceability sync with Delta payload
-    traceabilityGateway.emit("inventory_mutated", {
-      pharmacyId: req.user.id,
-      variantId: inventoryLot.medicineVariantId,
-      changedByUserId: req.user.id,
-      changeType: "UPDATED",
-      oldState,
-      newState: {
-        quantity: updatedLot.quantity,
-        priceRWF: updatedLot.priceRWF,
-        expiryDate: updatedLot.expiryDate,
-        location: updatedLot.location,
-      }
-    });
 
     return res.status(200).json({
-      message: "Inventory lot updated successfully",
-      lot: updatedLot
+      message: "Gateway sync verified successfully.",
+      syncedAt,
     });
   } catch (error) {
-    console.error("Inventory update failed", error);
-    return res.status(500).json({ message: "Failed to update inventory lot." });
+    console.error("Inventory sync failed", error);
+    return res.status(500).json({ message: "Unable to trigger inventory sync right now." });
   }
-};
+}

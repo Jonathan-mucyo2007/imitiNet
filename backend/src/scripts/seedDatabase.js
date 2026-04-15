@@ -11,6 +11,10 @@ import PatientVerification from "../models/PatientVerification.js";
 import PatientQrSession from "../models/PatientQrSession.js";
 import User from "../models/User.js";
 import NationalStatsMaterialized from "../models/NationalStatsMaterialized.js";
+import {
+  buildInventoryMedicineName,
+  buildNationalMedicineId,
+} from "../utils/nationalMedicineCatalog.js";
 
 dotenv.config({ path: "./.env" });
 
@@ -276,12 +280,18 @@ const medicineGroups = [
   },
 ];
 
-const insurers = [
-  { name: "RSSB - Mutuelle (Category 1)", coveragePercentage: 100, tier: 1 },
-  { name: "RSSB - Mutuelle (Category 3)", coveragePercentage: 85, tier: 3 },
-  { name: "MMI (Military)", coveragePercentage: 90, tier: 0 },
-  { name: "Radiant (Private)", coveragePercentage: 75, tier: 0 },
-];
+const insurerSeeds = {
+  parents: [
+    { key: "rssb", name: "RSSB - Mutuelle", coveragePercentage: 0, tier: 0, umbrellaCode: "RSSB", isUmbrellaProvider: true },
+    { key: "radiant", name: "Radiant", coveragePercentage: 75, tier: 0, umbrellaCode: "RADIANT", isUmbrellaProvider: false },
+    { key: "mmi", name: "MMI", coveragePercentage: 90, tier: 0, umbrellaCode: "MMI", isUmbrellaProvider: false },
+  ],
+  children: [
+    { key: "rssb-cat-1", parentKey: "rssb", name: "RSSB - Mutuelle (Category 1)", coveragePercentage: 100, tier: 1, umbrellaCode: "RSSB" },
+    { key: "rssb-cat-2", parentKey: "rssb", name: "RSSB - Mutuelle (Category 2)", coveragePercentage: 90, tier: 2, umbrellaCode: "RSSB" },
+    { key: "rssb-cat-3", parentKey: "rssb", name: "RSSB - Mutuelle (Category 3)", coveragePercentage: 85, tier: 3, umbrellaCode: "RSSB" },
+  ],
+};
 
 const users = [
   {
@@ -321,6 +331,23 @@ const users = [
     password: "rssb@2026",
     role: "insurer",
     facilityId: "RSSB-HQ-001",
+    insuranceProviderKey: "rssb",
+  },
+  {
+    fullName: "Radiant Lead Administrator",
+    email: "radiant@imitinet.rw",
+    password: "radiant@2026",
+    role: "insurer",
+    facilityId: "RAD-001",
+    insuranceProviderKey: "radiant",
+  },
+  {
+    fullName: "MMI Lead Administrator",
+    email: "mmi@imitinet.rw",
+    password: "mmi@2026",
+    role: "insurer",
+    facilityId: "MMI-001",
+    insuranceProviderKey: "mmi",
   },
   {
     fullName: "Minisante Chief Regulator",
@@ -383,7 +410,28 @@ async function seedDatabase() {
     ]);
 
     const createdPharmacies = await Pharmacy.insertMany(pharmacies);
-    const createdInsurers = await InsuranceProvider.insertMany(insurers);
+    const createdParentInsurers = await InsuranceProvider.insertMany(
+      insurerSeeds.parents.map((provider) => ({
+        name: provider.name,
+        coveragePercentage: provider.coveragePercentage,
+        tier: provider.tier,
+        umbrellaCode: provider.umbrellaCode,
+        isUmbrellaProvider: provider.isUmbrellaProvider,
+      }))
+    );
+    const insurerKeyMap = new Map(
+      insurerSeeds.parents.map((provider, index) => [provider.key, createdParentInsurers[index]])
+    );
+    const createdChildInsurers = await InsuranceProvider.insertMany(
+      insurerSeeds.children.map((provider) => ({
+        name: provider.name,
+        coveragePercentage: provider.coveragePercentage,
+        tier: provider.tier,
+        umbrellaCode: provider.umbrellaCode,
+        parentProviderId: insurerKeyMap.get(provider.parentKey)._id,
+      }))
+    );
+    const createdInsurers = [...createdParentInsurers, ...createdChildInsurers];
     const createdMedicineGroups = await MedicineGroup.insertMany(
       medicineGroups.map(({ genericName, category, description }) => ({
         genericName,
@@ -425,6 +473,10 @@ async function seedDatabase() {
         ...user,
         pharmacyProfileId:
           user.role === "pharmacy" ? createdPharmacies[0]._id : undefined,
+        insuranceProviderId:
+          user.role === "insurer" ? insurerKeyMap.get(user.insuranceProviderKey)?._id : undefined,
+        location:
+          user.role === "pharmacy" ? createdPharmacies[0].location : undefined,
       }))
     );
 
@@ -437,6 +489,9 @@ async function seedDatabase() {
           const variance = randomInt(-300, 1800);
           const isKigaliCentral = pharmacyIndex === 0;
           const sku = variant.sku;
+          const group = createdMedicineGroups.find((item) =>
+            item._id.equals(variant.medicineGroupId)
+          );
 
           let quantity;
           let expiryDate;
@@ -464,9 +519,21 @@ async function seedDatabase() {
           inventoryDocuments.push({
             pharmacyId: pharmacy._id,
             medicineVariantId: variant._id,
+            nationalMedicineId: buildNationalMedicineId({
+              genericName: group?.genericName || variant.sku,
+              sku: variant.sku,
+            }),
+            medicineName: buildInventoryMedicineName({
+              genericName: group?.genericName || variant.sku,
+              dosage: variant.dosage,
+              form: variant.form,
+            }),
+            sku: variant.sku,
+            category: group?.category || "General",
             batchNumber: `BATCH-${String(batchCounter).padStart(4, "0")}`,
             stockStatus,
             quantity,
+            unitPrice: Math.max(500, variant.basePrice + variance),
             priceRWF: Math.max(500, variant.basePrice + variance),
             expiryDate,
             location: locations[randomInt(0, locations.length - 1)],
@@ -557,7 +624,7 @@ async function seedDatabase() {
 
     const targetPharmacy = createdUsers.find((u) => u.role === "pharmacy");
     const patientUsers = createdUsers.filter((u) => u.role === "patient");
-    const insurerDocs = createdInsurers;
+    const insurerDocs = createdInsurers.filter((provider) => !provider.isUmbrellaProvider);
 
     for (let i = 0; i < 75; i++) {
       const claimStatus = statuses[Math.floor(Math.random() * statuses.length)];

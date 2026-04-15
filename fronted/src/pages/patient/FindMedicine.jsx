@@ -103,6 +103,7 @@ function PrescriptionMiniCard({ prescription, nearbyCount, onViewNearby }) {
   }
 
   const primaryMedication = prescription.medications?.[0];
+  const displayRxCode = prescription?.rxCode || prescription?.prescriptionId || prescription?.retrievalCode;
 
   return (
     <motion.section
@@ -121,7 +122,7 @@ function PrescriptionMiniCard({ prescription, nearbyCount, onViewNearby }) {
           </h1>
           <p className="mt-2 text-sm leading-7 text-slate-600">
             {primaryMedication?.dosage} {primaryMedication?.form} | SMS Retrieval Code{" "}
-            <span className="font-semibold text-slate-900">{prescription.retrievalCode}</span>
+            <span className="font-semibold text-slate-900">{displayRxCode}</span>
           </p>
         </div>
 

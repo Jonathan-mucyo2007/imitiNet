@@ -11,7 +11,9 @@ import PatientDashboard from "./pages/patient/PatientDashboard";
 import PharmacyDispense from "./pages/pharmacy/PharmacyDispense";
 import DashboardPharmacy from "./pages/pharmacy/Dashboard";
 import InventoryPharmacy from "./pages/pharmacy/Inventory";
+import PharmacySettings from "./pages/pharmacy/PharmacySettings";
 import InsurerDashboard from "./pages/insurer/InsurerDashboard";
+import PharmacyNetwork from "./pages/insurer/PharmacyNetwork";
 import InsurerLayout from "./components/layout/InsurerLayout";
 import AboutPage from "./pages/AboutPage";
 import ContactPage from "./pages/ContactPage";
@@ -85,11 +87,39 @@ function App() {
         }
       />
       <Route
+        path="/dashboard/pharmacy/settings"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacy"]}>
+            <PharmacySettings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/dashboard/insurer"
         element={
           <ProtectedRoute allowedRoles={["insurer"]}>
             <InsurerLayout>
               <InsurerDashboard />
+            </InsurerLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insurer/claims"
+        element={
+          <ProtectedRoute allowedRoles={["insurer"]}>
+            <InsurerLayout>
+              <InsurerDashboard />
+            </InsurerLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insurer/network"
+        element={
+          <ProtectedRoute allowedRoles={["insurer"]}>
+            <InsurerLayout>
+              <PharmacyNetwork />
             </InsurerLayout>
           </ProtectedRoute>
         }

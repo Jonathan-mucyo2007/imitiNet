@@ -1,9 +1,249 @@
 import Claim from "../models/Claim.js";
-import InsuranceProvider from "../models/InsuranceProvider.js";
+import PharmacyProfile from "../models/PharmacyProfile.js";
+import User from "../models/User.js";
 import { getIO } from "../socket.js";
+import { resolveInsurerScopeByUserId } from "../utils/insurerScope.js";
+import { calculatePharmacyNetworkRiskScore } from "../services/aiFraudService.js";
+
+const REVIEWABLE_STATUSES = ["Pending", "Flagged_By_AI"];
+const RESOLVED_STATUSES = ["Approved", "Rejected"];
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const TZ_KIGALI = "Africa/Kigali"; // CAT = UTC+02:00 — Used in ALL date stages
+
+function inferDistrictFromPharmacy(pharmacyProfile = {}, user = {}) {
+  const source = [
+    pharmacyProfile.address,
+    pharmacyProfile.facilityName,
+    pharmacyProfile.name,
+    user.facilityId,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/(nyamirambo|nyarugenge|kn\s?\d)/i.test(source)) return "Nyarugenge";
+  if (/(gikondo|kanombe|kicukiro|kk\s?\d)/i.test(source)) return "Kicukiro";
+  if (/(remera|kacyiru|kimironko|gasabo|kg\s?\d|kibagabaga)/i.test(source)) return "Gasabo";
+  return "Kigali";
+}
+
+async function buildPharmacyNetworkRegistry({
+  insurerUserId,
+  search = "",
+  sortBy = "aiRiskScore",
+  sortOrder = "desc",
+}) {
+  const insurerScope = await resolveInsurerScopeByUserId(insurerUserId);
+
+  if (insurerScope.error) {
+    return insurerScope;
+  }
+
+  const providerIds = insurerScope.scopedProviderIds;
+  const searchRegex = search ? new RegExp(search, "i") : null;
+
+  const groupedClaims = await Claim.aggregate([
+    { $match: { insuranceProviderId: { $in: providerIds } } },
+    {
+      $group: {
+        _id: "$pharmacyId",
+        totalClaims: { $sum: 1 },
+        approvedClaims: { $sum: { $cond: [{ $eq: ["$status", "Approved"] }, 1, 0] } },
+        rejectedClaims: { $sum: { $cond: [{ $eq: ["$status", "Rejected"] }, 1, 0] } },
+        flaggedClaims: { $sum: { $cond: [{ $eq: ["$status", "Flagged_By_AI"] }, 1, 0] } },
+        highPriceAlerts: {
+          $sum: {
+            $cond: [{ $eq: ["$aiFraudCheck.reasonCode", "HIGH_PRICE_OUTLIER"] }, 1, 0],
+          },
+        },
+        totalClaimAmount: { $sum: "$totalAmountRWF" },
+        averageClaimAmount: { $avg: "$totalAmountRWF" },
+        averageApprovalHours: { $avg: "$approvalTimeHours" },
+        lastClaimAt: { $max: "$submittedAt" },
+      },
+    },
+  ]);
+
+  if (!groupedClaims.length) {
+    return {
+      insurerScope,
+      stats: {
+        totalPharmacies: 0,
+        nationalRiskScore: 0,
+        averageDispenseTimeHours: 0,
+      },
+      registry: [],
+      districtHeatmap: [],
+    };
+  }
+
+  const pharmacyUserIds = groupedClaims.map((entry) => entry._id);
+  const pharmacyUsers = await User.find({ _id: { $in: pharmacyUserIds } })
+    .select("fullName facilityId pharmacyProfileId")
+    .populate("pharmacyProfileId")
+    .lean();
+
+  const userById = new Map(pharmacyUsers.map((user) => [String(user._id), user]));
+
+  const preliminaryRegistry = groupedClaims
+    .map((entry) => {
+      const pharmacyUser = userById.get(String(entry._id));
+      const pharmacyProfile = pharmacyUser?.pharmacyProfileId || null;
+
+      if (!pharmacyUser || !pharmacyProfile) {
+        return null;
+      }
+
+      const district = inferDistrictFromPharmacy(pharmacyProfile, pharmacyUser);
+      const averageClaimAmount = Number(entry.averageClaimAmount || 0);
+
+      return {
+        id: String(entry._id),
+        pharmacyUserId: String(entry._id),
+        pharmacyName:
+          pharmacyProfile.facilityName || pharmacyProfile.name || pharmacyUser.fullName,
+        district,
+        facilityId: pharmacyUser.facilityId || "Facility ID unavailable",
+        pharmacyProfile: {
+          id: pharmacyProfile._id,
+          facilityName: pharmacyProfile.facilityName || pharmacyProfile.name,
+          address: pharmacyProfile.address,
+          location: pharmacyProfile.location,
+          contactEmail: pharmacyProfile.contactEmail || "",
+        },
+        totalClaims: entry.totalClaims,
+        approvedClaims: entry.approvedClaims,
+        rejectedClaims: entry.rejectedClaims,
+        flaggedClaims: entry.flaggedClaims,
+        highPriceAlerts: entry.highPriceAlerts,
+        totalClaimAmount: Number(entry.totalClaimAmount || 0),
+        averageClaimAmount,
+        averageApprovalHours: Number(entry.averageApprovalHours || 0),
+        deniedApprovedRatio:
+          entry.approvedClaims > 0
+            ? Number((entry.rejectedClaims / entry.approvedClaims).toFixed(2))
+            : entry.rejectedClaims > 0
+              ? Number(entry.rejectedClaims.toFixed(2))
+              : 0,
+        lastClaimAt: entry.lastClaimAt,
+      };
+    })
+    .filter(Boolean);
+
+  const districtMeans = preliminaryRegistry.reduce((accumulator, item) => {
+    if (!accumulator[item.district]) {
+      accumulator[item.district] = { total: 0, count: 0 };
+    }
+
+    accumulator[item.district].total += item.averageClaimAmount;
+    accumulator[item.district].count += 1;
+    return accumulator;
+  }, {});
+
+  const registry = preliminaryRegistry
+    .map((item) => {
+      const districtAverage = districtMeans[item.district];
+      const regionalMeanAmount = districtAverage
+        ? districtAverage.total / districtAverage.count
+        : item.averageClaimAmount;
+
+      const risk = calculatePharmacyNetworkRiskScore({
+        totalClaims: item.totalClaims,
+        rejectedClaims: item.rejectedClaims,
+        flaggedClaims: item.flaggedClaims,
+        highPriceAlerts: item.highPriceAlerts,
+        averageClaimAmount: item.averageClaimAmount,
+        regionalMeanAmount,
+      });
+
+      return {
+        ...item,
+        aiRiskScore: risk.score,
+        aiRiskBand: risk.riskBand,
+        status: risk.status,
+        contributingFactors: risk.contributingFactors,
+      };
+    })
+    .filter((item) => {
+      if (!searchRegex) {
+        return true;
+      }
+
+      return [
+        item.pharmacyName,
+        item.district,
+        item.facilityId,
+        item.pharmacyProfile.address,
+      ]
+        .filter(Boolean)
+        .some((value) => searchRegex.test(value));
+    });
+
+  const sortMultiplier = sortOrder === "asc" ? 1 : -1;
+  registry.sort((first, second) => {
+    const comparableFields = {
+      aiRiskScore: [first.aiRiskScore, second.aiRiskScore],
+      totalClaims: [first.totalClaims, second.totalClaims],
+      deniedApprovedRatio: [first.deniedApprovedRatio, second.deniedApprovedRatio],
+      averageApprovalHours: [first.averageApprovalHours, second.averageApprovalHours],
+      pharmacyName: [first.pharmacyName, second.pharmacyName],
+    };
+
+    const [a, b] = comparableFields[sortBy] || comparableFields.aiRiskScore;
+
+    if (typeof a === "string" || typeof b === "string") {
+      return String(a).localeCompare(String(b)) * sortMultiplier;
+    }
+
+    return (Number(a) - Number(b)) * sortMultiplier;
+  });
+
+  const districtHeatmap = Object.entries(
+    registry.reduce((accumulator, item) => {
+      if (!accumulator[item.district]) {
+        accumulator[item.district] = {
+          district: item.district,
+          totalRisk: 0,
+          pharmacies: 0,
+          coordinates: item.pharmacyProfile.location?.coordinates || [30.06, -1.95],
+        };
+      }
+
+      accumulator[item.district].totalRisk += item.aiRiskScore;
+      accumulator[item.district].pharmacies += 1;
+      return accumulator;
+    }, {})
+  ).map(([, value]) => ({
+    district: value.district,
+    averageRiskScore: Number((value.totalRisk / value.pharmacies).toFixed(2)),
+    pharmacies: value.pharmacies,
+    coordinates: value.coordinates,
+  }));
+
+  const stats = {
+    totalPharmacies: registry.length,
+    nationalRiskScore: Number(
+      (
+        registry.reduce((sum, item) => sum + item.aiRiskScore, 0) /
+        Math.max(1, registry.length)
+      ).toFixed(2)
+    ),
+    averageDispenseTimeHours: Number(
+      (
+        registry.reduce((sum, item) => sum + item.averageApprovalHours, 0) /
+        Math.max(1, registry.length)
+      ).toFixed(1)
+    ),
+  };
+
+  return {
+    insurerScope,
+    stats,
+    registry,
+    districtHeatmap,
+  };
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,8 +319,13 @@ const getQuarterBoundaries = () => {
 export const getDashboardStats = async (req, res) => {
   try {
     const { search } = req.query;
-    const rssbProviders = await InsuranceProvider.find({ name: /RSSB/i });
-    const providerIds = rssbProviders.map((p) => p._id);
+    const insurerScope = await resolveInsurerScopeByUserId(req.user.id);
+
+    if (insurerScope.error) {
+      return res.status(insurerScope.error.status).json({ message: insurerScope.error.message });
+    }
+
+    const providerIds = insurerScope.scopedProviderIds;
 
     const { currentQStartUTC, prevQStartUTC } = getQuarterBoundaries();
 
@@ -98,8 +343,15 @@ export const getDashboardStats = async (req, res) => {
 
     // Fire recentClaims asynchronously in parallel with the heavy aggregation
     const recentClaimsPromise = Claim.find(recentClaimMatch)
-      .select('claimId patientName pharmacyId insurerName approvalTimeHours totalAmountRWF coveredAmountRWF patientPaysRWF status medicineSnapshot submittedAt paymentChannel')
-      .populate('pharmacyId', 'fullName facilityId')
+      .select('claimId patientName pharmacyId insurerName approvalTimeHours totalAmountRWF coveredAmountRWF patientPaysRWF status medicineSnapshot submittedAt paymentChannel aiFraudCheck rejectionReason')
+      .populate('pharmacyId', 'fullName facilityId location pharmacyProfileId')
+      .populate({
+        path: 'pharmacyId',
+        populate: {
+          path: 'pharmacyProfileId',
+          select: 'name',
+        },
+      })
       .sort({ submittedAt: -1 })
       .limit(100)
       .lean();
@@ -114,11 +366,11 @@ export const getDashboardStats = async (req, res) => {
                 _id: null,
                 cqTotalClaims: { $sum: { $cond: [{ $gte: ["$submittedAt", currentQStartUTC] }, 1, 0] } },
                 cqApprovedClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", currentQStartUTC] }, { $eq: ["$status", "Approved"] }] }, 1, 0] } },
-                cqPendingClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", currentQStartUTC] }, { $eq: ["$status", "Pending"] }] }, 1, 0] } },
+                cqPendingClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", currentQStartUTC] }, { $in: ["$status", REVIEWABLE_STATUSES] }] }, 1, 0] } },
                 cqTotalPayoutRWF: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", currentQStartUTC] }, { $eq: ["$status", "Approved"] }] }, "$coveredAmountRWF", 0] } },
                 pqTotalClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", prevQStartUTC] }, { $lt: ["$submittedAt", currentQStartUTC] }] }, 1, 0] } },
                 pqApprovedClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", prevQStartUTC] }, { $lt: ["$submittedAt", currentQStartUTC] }, { $eq: ["$status", "Approved"] }] }, 1, 0] } },
-                pqPendingClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", prevQStartUTC] }, { $lt: ["$submittedAt", currentQStartUTC] }, { $eq: ["$status", "Pending"] }] }, 1, 0] } },
+                pqPendingClaims: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", prevQStartUTC] }, { $lt: ["$submittedAt", currentQStartUTC] }, { $in: ["$status", REVIEWABLE_STATUSES] }] }, 1, 0] } },
                 pqTotalPayoutRWF: { $sum: { $cond: [{ $and: [{ $gte: ["$submittedAt", prevQStartUTC] }, { $lt: ["$submittedAt", currentQStartUTC] }, { $eq: ["$status", "Approved"] }] }, "$coveredAmountRWF", 0] } },
               },
             },
@@ -237,6 +489,11 @@ export const getDashboardStats = async (req, res) => {
     }));
 
     const finalPayload = {
+      insurer: {
+        id: insurerScope.primaryProvider._id,
+        name: insurerScope.primaryProvider.name,
+        umbrellaCode: insurerScope.primaryProvider.umbrellaCode || null,
+      },
       metrics,
       trendData: formattedTrendData,
       categoryDistribution,
@@ -277,5 +534,57 @@ export const manualTriggerFraudScan = async (req, res) => {
   } catch (error) {
     console.error("Fraud trigger error:", error);
     return res.status(500).json({ message: "Socket dispatch failed." });
+  }
+};
+
+export const getPharmacyNetworkStats = async (req, res) => {
+  try {
+    const networkData = await buildPharmacyNetworkRegistry({
+      insurerUserId: req.user.id,
+    });
+
+    if (networkData.error) {
+      return res.status(networkData.error.status).json({ message: networkData.error.message });
+    }
+
+    return res.status(200).json({
+      insurer: {
+        id: networkData.insurerScope.primaryProvider._id,
+        name: networkData.insurerScope.primaryProvider.name,
+        umbrellaCode: networkData.insurerScope.primaryProvider.umbrellaCode || null,
+      },
+      stats: networkData.stats,
+      districtHeatmap: networkData.districtHeatmap,
+    });
+  } catch (error) {
+    console.error("Pharmacy network stats failed", error);
+    return res.status(500).json({ message: "Failed to load pharmacy network stats." });
+  }
+};
+
+export const getPharmacyNetworkRegistry = async (req, res) => {
+  try {
+    const networkData = await buildPharmacyNetworkRegistry({
+      insurerUserId: req.user.id,
+      search: String(req.query.search || "").trim(),
+      sortBy: String(req.query.sortBy || "aiRiskScore").trim(),
+      sortOrder: String(req.query.sortOrder || "desc").trim(),
+    });
+
+    if (networkData.error) {
+      return res.status(networkData.error.status).json({ message: networkData.error.message });
+    }
+
+    return res.status(200).json({
+      insurer: {
+        id: networkData.insurerScope.primaryProvider._id,
+        name: networkData.insurerScope.primaryProvider.name,
+        umbrellaCode: networkData.insurerScope.primaryProvider.umbrellaCode || null,
+      },
+      registry: networkData.registry,
+    });
+  } catch (error) {
+    console.error("Pharmacy network registry failed", error);
+    return res.status(500).json({ message: "Failed to load pharmacy network registry." });
   }
 };

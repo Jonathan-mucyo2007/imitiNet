@@ -1,5 +1,7 @@
 import express from "express";
 import {
+  adjudicateClaim,
+  cancelClaim,
   checkCoverage,
   getProviders,
   previewPrescriptionClaim,
@@ -14,5 +16,7 @@ router.get("/providers", verifyToken, getProviders);
 router.post("/check-coverage", verifyToken, checkCoverage);
 router.post("/preview", verifyToken, requireRole(["pharmacy"]), previewPrescriptionClaim);
 router.post("/submit", verifyToken, requireRole(["pharmacy"]), submitClaim);
+router.patch("/:id/cancel", verifyToken, requireRole(["pharmacy"]), cancelClaim);
+router.put("/:id/adjudicate", verifyToken, adjudicateClaim);
 
 export default router;
